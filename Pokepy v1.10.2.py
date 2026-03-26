@@ -107,7 +107,7 @@ class ClassIcard:
 class ItemPack:
     def __init__(self):
         self.items = ["Astral Wand", "Fiery Leather",
-                      "Quantum Ball", "Celestial Wand", "Orbital Boots"]
+                      "Quantum Ball", "Orbital Boots", "Magical Powder"]
 
     def generate_Icard(self):
         item = random.choices(list(self.items))[0]
@@ -311,42 +311,111 @@ class Player:
 
 class Shop:
     def __init__(self):
-        global stocklist, randchoice
-        stocklist = ["ON STOCK", "NO STOCK"]
-        randchoice = random.choice(stocklist)
+        self.stocklist = ["ON STOCK", "NO STOCK"]
+        self.randchoice = random.choice(self.stocklist)
 
-    def verify(self, buy, inv):  # where: buy = item the user is buying, inv = inventory
-        print
+        def verify(self, buy, inv):  # where: buy = item the user is buying, inv = inventory
+            filepath = "poke-py/Database/itemdata.json"
+            existing_data = {"coins": 0}
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    content = f.read()
+                    if content.strip():
+                        existing_data = json.loads(content)
 
-    def cts(self):
+    def cts(self, p):  # pass the Player object so we can update inventory
         print("Welcome to the Shop, player!\n")
-        print("CURRENT STOCKS\n"
-              f"1. Astral Wand for 5 Magical Powder and 2 Fiery Leather\n"
-              f"2. Upgrade Card for 2 Quantum Ball\n"
-              f"3. Chest for  Magical Powder\n"
-              f"4. Celestial Wand - {randchoice}\n"
-              )
-        if randchoice == "ON STOCK":
-            fixed = "ON STOCK"
+        print("CURRENT STOCKS")
+        print(f"1. Astral Wand        - 5 Magical Powder, 2 Fiery Leather")
+        print(f"2. Upgrade Card       - 2 Quantum Ball")
+        print(f"3. Chest              - 3 Magical Powder")
+        print(f"4. Celestial Wand     - {self.randchoice}")
+        print()
+
+        if self.randchoice == "ON STOCK":
             print(
-                f"Celestial Wand for 3 Fiery Leather, 5 Magical Powder, 1 Celestial Wand, and 1 Quantum Ball ")
-        else:
-            pass
+                f"Celestial Wand costs: 3 Fiery Leather, 5 Magical Powder, 1 Quantum Ball\n")
+
         inp = input("Please select an item to trade: ")
-        if inp == "1":
-            print
-        elif inp == "2":
-            print
-        elif inp == "3":
-            print
-        elif inp == "4":
-            if fixed == "ON STOCK":
-                print
-            else:
-                print("Celestial wand is not on stock. Try again later!")
-        else:
-            print("Item entered is either not on stock or not found.")
-            time.sleep(3)
+
+        # Define shop items as a dict for clean access
+        shop_items = {
+            "1": {
+                "name": "Astral Wand",
+                "cost": {"Magical Powder": 5, "Fiery Leather": 2}
+            },
+            "2": {
+                "name": "Upgrade Card",
+                "cost": {"Quantum Ball": 2}
+            },
+            "3": {
+                "name": "Chest",
+                "cost": {"Magical Powder": 3}
+            },
+            "4": {
+                "name": "Celestial Wand",
+                "cost": {"Fiery Leather": 3, "Magical Powder": 5, "Quantum Ball": 1}
+            }
+        }
+
+        if inp not in shop_items:
+            print("Item not found. Try again!")
+            time.sleep(2)
+            return
+
+        if inp == "4" and self.randchoice == "NO STOCK":
+            print(
+                f"{Fore.RED}Celestial Wand is not on stock. Try again later!{Fore.RESET}")
+            time.sleep(2)
+            return
+
+        selected = shop_items[inp]
+        name = selected["name"]
+        cost = selected["cost"]
+
+        # Show cost and ask confirmation
+        cost_str = ", ".join(f"{qty} {item}" for item, qty in cost.items())
+        print(f"\nYou selected: {name}")
+        print(f"Cost: {cost_str}")
+        confirm = input("Confirm trade? (y/n): ").strip().lower()
+
+        if confirm != "y":
+            print("Trade cancelled.")
+            return
+
+        # Verify player has enough items
+        if not self.verify(name, cost):
+            return  # verify already prints the error message
+
+        # Deduct items from inventory
+        self.deduct_items(cost)
+
+        # Add bought item to inventory
+        p.auto_addItems({name: 1})
+        print(f"{Fore.GREEN}You successfully traded for {name}!{Fore.RESET}")
+
+    def deduct_items(self, cost):
+        filepath = "Database/itemdata.json"
+        existing_data = []
+
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                content = f.read()
+                if content.strip():
+                    existing_data = json.loads(content)
+
+        for item_name, qty in cost.items():
+            for owned_item in existing_data:
+                if owned_item["item_name"] == item_name:
+                    owned_item["quantity"] -= qty
+                    break
+
+        # Remove items with 0 or less quantity
+        existing_data = [
+            item for item in existing_data if item["quantity"] > 0]
+
+        with open(filepath, "w") as f:
+            json.dump(existing_data, f, indent=4)
 
 
 def clear_screen():
@@ -374,7 +443,7 @@ def main():
             # EDITED: New header. Func CUS *upd-009.cd-230326
             "5. Modify Cards (INACTIVE)\n"
             "6. Special Events (INACTIVE)\n"
-            "7. Shop (INACTIVE)\n"
+            "7. Shop (TESTING)\n"
             "8. Exit\n"
         )
         x = input("Choose an option: ")
@@ -438,7 +507,7 @@ def main():
             time.sleep(2)
             main()
         elif x == "7":
-            shop.cts()
+            shop.cts(p)
         elif x == "8":
             print("Thank you for playing! See you again!")
             time.sleep(2)
