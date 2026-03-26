@@ -127,8 +127,8 @@ class Player:
         self.exp = 0
 
     def add_cards(self, cards):
-        os.makedirs("/poke-py/Database", exist_ok=True)
-        filepath = "poke-py/Database/carddata.json"
+        os.makedirs("Database", exist_ok=True)
+        filepath = "Database/carddata.json"
 
         if os.path.exists(filepath):
             with open(filepath, "r") as f:
@@ -143,8 +143,8 @@ class Player:
             json.dump(existing_data, f, indent=4)
 
     def auto_addItems(self, item_counts):
-        os.makedirs("/poke-py/Database", exist_ok=True)
-        filepath = "poke-py/Database/itemdata.json"
+        os.makedirs("Database", exist_ok=True)
+        filepath = "Database/itemdata.json"
 
         # Initialize first to avoid UnboundLocalError
         existing_data = []
@@ -163,7 +163,7 @@ class Player:
                     existing_item["quantity"] += qty
                     break
             else:
-                existing_data.append(ClassIcard([name]).to_dict(qty))
+                existing_data.append(ClassIcard(name).to_dict(qty))
 
         # Write
         with open(filepath, "w") as f:
@@ -203,8 +203,8 @@ class Player:
 
     # UPDATED new save_progress *upd-008.cd-220326
     def save_progress(self):
-        os.makedirs("/poke-py/Database", exist_ok=True)
-        filepath = "poke-py/Database/expdata.json"
+        os.makedirs("Database", exist_ok=True)
+        filepath = "Database/expdata.json"
         data = {
             "level": 1,
             "exp": 0
@@ -215,8 +215,8 @@ class Player:
 
     # UPDATE: new load_progress *upd-005.cd-220326
     def load_progress(self):
-        os.makedirs("/poke-py/Database", exist_ok=True)
-        filepath = "poke-py/Database/expdata.json"
+        os.makedirs("Database", exist_ok=True)
+        filepath = "Database/expdata.json"
 
         if not os.path.exists(filepath):
             default_data = {"level": 1, "exp": 0}
@@ -233,8 +233,8 @@ class Player:
 
     # UPDATED add_coins now functioning *upd-003.cd-220326
     def add_coins(self, amount):
-        os.makedirs("/poke-py/Database", exist_ok=True)
-        FILEPATH = "poke-py/Database/coinsdata.json"
+        os.makedirs("Database", exist_ok=True)
+        FILEPATH = "Database/coinsdata.json"
 
         existing_data = {"coins": 0}
 
@@ -254,7 +254,7 @@ class Player:
 
     # UPDATED: spend_money now functioning *upd-004.cd-220326
     def spend_money(self, amount):
-        filepath = "poke-py/Database/coinsdata.json"
+        filepath = "Database/coinsdata.json"
 
         # Read current coins
         existing_data = {"coins": 0}
@@ -282,8 +282,8 @@ class Player:
         return True
 
     def show_stats(self):
-        os.makedirs("/poke-py/Database", exist_ok=True)
-        FILEPATH1 = "poke-py/Database/coinsdata.json"
+        os.makedirs("Database", exist_ok=True)
+        FILEPATH1 = "Database/coinsdata.json"
         coins = 0  # default if file doesn't exist yet
         if os.path.exists(FILEPATH1):
             with open(FILEPATH1, "r") as f:
@@ -314,14 +314,36 @@ class Shop:
         self.stocklist = ["ON STOCK", "NO STOCK"]
         self.randchoice = random.choice(self.stocklist)
 
-        def verify(self, buy, inv):  # where: buy = item the user is buying, inv = inventory
-            filepath = "poke-py/Database/itemdata.json"
-            existing_data = {"coins": 0}
-            if os.path.exists(filepath):
-                with open(filepath, "r") as f:
-                    content = f.read()
-                    if content.strip():
-                        existing_data = json.loads(content)
+    def verify(self, buy, inv):
+        # buy = the item the player wants to buy (string)
+        # inv = dict of items the player needs to spend e.g. {"Astral Wand": 2}
+
+        filepath = "Database/itemdata.json"
+        existing_data = []
+
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                content = f.read()
+                if content.strip():
+                    existing_data = json.loads(content)
+
+        # Check if player has enough of each required item
+        for required_item, required_qty in inv.items():
+            for owned_item in existing_data:
+                if owned_item["item_name"] == required_item:
+                    if owned_item["quantity"] < required_qty:
+                        print(
+                            f"{Fore.RED}Not enough {required_item}! You have {owned_item['quantity']} but need {required_qty}.{Fore.RESET}")
+                        return False
+                    break
+            else:
+                # Item not found in inventory at all
+                print(f"{Fore.RED}You don't have any {required_item}!{Fore.RESET}")
+                return False
+
+        print(f"{Fore.GREEN}Purchase verified! You can buy {buy}.{Fore.RESET}")
+        time.sleep(2)
+        return True
 
     def cts(self, p):  # pass the Player object so we can update inventory
         print("Welcome to the Shop, player!\n")
@@ -431,19 +453,17 @@ def main():
     shop = Shop()
     p.startup()
     while True:
-        clear_screen()
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.8.0\n")
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.11.5\n")
         print("NOTE: This update only partially saves your game data. A few more patches! \n", file=sys.stderr)
         time.sleep(2)
         print(
             "1. Open a pack\n"
             "2. Player Stats\n"
-            "3. View Inventory/Collection\n"
+            "3. View Inventory/Collection (INACTIVE)\n"
             "4. Daily Reward (INACTIVE)\n"
-            # EDITED: New header. Func CUS *upd-009.cd-230326
             "5. Modify Cards (INACTIVE)\n"
             "6. Special Events (INACTIVE)\n"
-            "7. Shop (TESTING)\n"
+            "7. Shop \n"
             "8. Exit\n"
         )
         x = input("Choose an option: ")
@@ -471,11 +491,10 @@ def main():
                 print("Nice! Here are the items you got:")
                 time.sleep(1.5)
             for x, items in enumerate(item):
-                # EDITED: Removed [0] *upd-001.cd-220326
                 print(f"{x+1}. {items.Icard}")
                 item_counts = {}
                 for card in item:
-                    name = card.Icard  # EDITED: Removed [0] *upd-002.cd-220326
+                    name = card.Icard
                     item_counts[name] = item_counts.get(name, 0) + 1
             print("You may use these items to upgrade your Pokemon © cards.")
             p.auto_addItems(item_counts)
