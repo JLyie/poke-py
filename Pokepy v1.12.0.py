@@ -16,6 +16,8 @@ from colorama import Fore, init, Back
 from datetime import datetime
 import json
 
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 class Card:
     def __init__(self, name, rarity, border, image_quality, worth):
@@ -170,14 +172,48 @@ class Player:
             json.dump(existing_data, f, indent=4)
 
     def view_collection(self):
-        print("Your Card Collection:")
-        for i, card in enumerate(self.collection):
-            print(f"{i+1}. {card}")
+        filepath = "Database/carddata.json"
+
+        if not os.path.exists(filepath):
+            print("No card collection found.")
+            return
+
+        with open(filepath, "r") as f:
+            content = f.read()
+            if not content.strip():
+                print("Your card collection is empty.")
+                return
+            cards = json.loads(content)
+
+        print("\n=== YOUR CARD COLLECTION ===")
+        for i, card in enumerate(cards, start=1):
+            print(f"{i}. {card['name']}")
+            print(f"   Rarity       : {card['rarity']}")
+            print(f"   Border       : {card['border']}")
+            print(f"   Image Quality: {card['image_quality']}")
+            print(f"   Worth        : ${card['worth']:.2f}")
+            print()
+        print(f"Total cards: {len(cards)}")
+        print("============================\n")
 
     def view_items(self):
-        print("Your item inventory:")
-        for i, item in enumerate(self.items):
-            print(f"{i+1}. {item}")
+        filepath = "Database/itemdata.json"
+
+        if not os.path.exists(filepath):
+            print("No item inventory found.")
+            return
+
+        with open(filepath, "r") as f:
+            content = f.read()
+            if not content.strip():
+                print("Your item inventory is empty.")
+                return
+            items = json.loads(content)
+
+        print("\n=== YOUR ITEM INVENTORY ===")
+        for i, item in enumerate(items, start=1):
+            print(f"{i}. {item['item_name']} x{item['quantity']}")
+        print("===========================\n")
 
     # UPDATED fixed gain_exp *upd-007.cd-220326
     def gain_exp(self, amount):
@@ -459,7 +495,7 @@ def main():
         print(
             "1. Open a pack\n"
             "2. Player Stats\n"
-            "3. View Inventory/Collection (INACTIVE)\n"
+            "3. View Inventory/Collection (PROD)\n"
             "4. Daily Reward (INACTIVE)\n"
             "5. Modify Cards (INACTIVE)\n"
             "6. Special Events (INACTIVE)\n"

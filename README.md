@@ -14,11 +14,10 @@ The sole purpose of this project/program being in GitHub is to learn more by rec
 3. Run the game:
    python "Pokepy v1.10.2.py"
 
-```
-
 ---
 
 **Pro tip:** You can also create a `requirements.txt` file listing all your dependencies:
+
 ```
 
 colorama
@@ -26,6 +25,9 @@ colorama
 ```
 
 Then players just run:
+
 ```
 
 pip install -r requirements.txt
+
+```
