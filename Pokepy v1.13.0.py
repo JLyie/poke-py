@@ -426,6 +426,10 @@ class Shop:
                 f"{Fore.RED}Celestial Wand is not on stock. Try again later!{Fore.RESET}")
             time.sleep(2)
             return
+        elif inp == "3":
+            selected = shop_items["3"]
+            name = selected["name"]
+            cost = selected["cost"]
 
         selected = shop_items[inp]
         name = selected["name"]
@@ -447,6 +451,7 @@ class Shop:
 
         # Deduct items from inventory
         self.deduct_items(cost)
+        self.open_chest(p)
 
         # Add bought item to inventory
         p.auto_addItems({name: 1})
@@ -475,6 +480,43 @@ class Shop:
         with open(filepath, "w") as f:
             json.dump(existing_data, f, indent=4)
 
+    def open_chest(self, p):
+        print(f"\n{Fore.YELLOW}Opening chest...{Fore.RESET}")
+        time.sleep(1.5)
+
+        # Loot pool with weights — lower weight = rarer
+        loot_pool = [
+            {"name": "Magical Powder", "weight": 40},
+            {"name": "Fiery Leather", "weight": 30},
+            {"name": "Quantum Ball", "weight": 20},
+            {"name": "Void Crystal", "weight": 10},  # rare exclusive
+        ]
+
+        names = [item["name"] for item in loot_pool]
+        weights = [item["weight"] for item in loot_pool]
+
+        # Random amount of random items (1-5)
+        num_items = random.randint(1, 5)
+        loot = random.choices(names, weights=weights, k=num_items)
+
+        # Count duplicates
+        loot_counts = {}
+        for item in loot:
+            loot_counts[item] = loot_counts.get(item, 0) + 1
+
+        # Display loot
+        print(f"{Fore.YELLOW}You got:{Fore.RESET}")
+        for item_name, qty in loot_counts.items():
+            if item_name == "Void Crystal":
+                print(f"{Fore.MAGENTA}  - {item_name} x{qty} (RARE!){Fore.RESET}")
+            else:
+                print(f"  - {item_name} x{qty}")
+
+        time.sleep(1)
+
+        p.auto_addItems(loot_counts)
+        print(f"{Fore.GREEN} Items added to your inventory!{Fore.RESET}")
+
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -483,19 +525,21 @@ def clear_screen():
 # MAIN
 
 def main():
+
     pack = Pack()
     p = Player()
     Ipack = ItemPack()
     shop = Shop()
     p.startup()
+    clear_screen()
     while True:
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.11.5\n")
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.13.0\n")
         print("NOTE: This update only partially saves your game data. A few more patches! \n", file=sys.stderr)
         time.sleep(2)
         print(
             "1. Open a pack\n"
             "2. Player Stats\n"
-            "3. View Inventory/Collection (PROD)\n"
+            "3. View Inventory/Collection\n"
             "4. Daily Reward (INACTIVE)\n"
             "5. Modify Cards (INACTIVE)\n"
             "6. Special Events (INACTIVE)\n"
