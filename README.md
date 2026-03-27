@@ -6,7 +6,7 @@ The latest initial commits are still an unfinished program and is undergoing upd
 Do understand that this is just a beginner project, nothing too serious, but it might be serious if the game continues to receive updates.
 The sole purpose of this project/program being in GitHub is to learn more by receiving help from people who might see this and also learn stuff like using GitHub and Git. - dev
 
-## How To Run PokePy?
+## How To Run PokePy? (Run PokePy when we release the stable version (v2.0.0))
 
 1. Install Python from python.org
 2. Install dependencies:

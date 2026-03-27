@@ -1,11 +1,4 @@
-'''
-A card game project by devJL.
 
-Created on March ?, 2026. This is an updated version that releases on March 31, 2026.
-This version (1.8.0) is NOT YET released. Current Released Version: Pokepy v1.6.4
-
-Pokepy v(1.8.0)
-'''
 
 import sys
 import os
@@ -17,6 +10,19 @@ from datetime import datetime
 import json
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+RARITY_TIERS = ["Common", "Uncommon", "Rare", "Legendary"]
+BORDER_TIERS = ["Normal", "Foil", "Holo", "Rainbow"]
+QUALITY_TIERS = ["Poor", "Good", "Excellent", "Perfect"]
+
+RARITY_WORTH = {"Common": 1, "Uncommon": 3, "Rare": 10, "Legendary": 30}
+BORDER_WORTH = {"Normal": 1, "Foil": 2, "Holo": 4, "Rainbow": 8}
+QUALITY_WORTH = {"Poor": 0.5, "Good": 1, "Excellent": 2, "Perfect": 4}
+
+UPGRADE_COSTS = {
+    1: {"items": {"Magical Powder": 2}, "coins": 10},
+    2: {"items": {"Fiery Leather": 2}, "coins": 25},
+    3: {"items": {"Void Crystal": 1, "Quantum Ball": 2}, "coins": 50}
+}
 
 
 class Card:
@@ -337,6 +343,158 @@ class Player:
         print(f"Coins    : {coins}")
         print("====================\n")
 
+    def upgrade_card(self, p_coins):
+        filepath = "Database/carddata.json"
+
+        if not os.path.exists(filepath):
+            print("No card collection found.")
+            return
+
+        with open(filepath, "r") as f:
+            content = f.read()
+            if not content.strip():
+                print("Your card collection is empty.")
+                return
+            cards = json.loads(content)
+
+        # Show collection
+        print("\n=== SELECT A CARD TO UPGRADE ===")
+        for i, card in enumerate(cards, start=1):
+            print(
+                f"{i}. {card['name']} | Rarity: {card['rarity']} | Border: {card['border']} | Quality: {card['image_quality']} | Worth: ${card['worth']:.2f}")
+        print()
+
+        # Select card
+        try:
+            choice = int(input("Select a card number (0 to cancel): "))
+            if choice == 0:
+                return
+            if choice < 1 or choice > len(cards):
+                print("Invalid choice.")
+                return
+        except ValueError:
+            print("Please enter a valid number.")
+            return
+
+        selected_card = cards[choice - 1]
+        print(f"\nSelected: {selected_card['name']}")
+        print(
+            f"Rarity: {selected_card['rarity']} | Border: {selected_card['border']} | Quality: {selected_card['image_quality']}")
+
+        if (selected_card["rarity"] == RARITY_TIERS[-1] and
+            selected_card["border"] == BORDER_TIERS[-1] and
+                selected_card["image_quality"] == QUALITY_TIERS[-1]):
+            print(
+                f"{Fore.YELLOW}This card is fully maxed out! (Legendary | Rainbow | Perfect){Fore.RESET}")
+            return
+
+        # Select upgrade type
+        print("\nWhat would you like to upgrade?")
+        print("1. Rarity")
+        print("2. Border")
+        print("3. Image Quality")
+        upgrade_choice = input("Select upgrade type (0 to cancel): ").strip()
+
+        if upgrade_choice == "0":
+            return
+
+        upgrade_map = {
+            "1": ("rarity", RARITY_TIERS),
+            "2": ("border", BORDER_TIERS),
+            "3": ("image_quality", QUALITY_TIERS)
+        }
+
+        if upgrade_choice not in upgrade_map:
+            print("Invalid choice.")
+            return
+
+        card_key, tiers = upgrade_map[upgrade_choice]
+        current_value = selected_card[card_key]
+
+        # Check if already max tier
+        if current_value == tiers[-1]:
+            print(
+                f"{Fore.YELLOW}{card_key.capitalize()} is already at max tier ({tiers[-1]})!{Fore.RESET}")
+            return
+
+        # Get next tier and cost
+        current_index = tiers.index(current_value)
+        next_tier = tiers[current_index + 1]
+        cost = UPGRADE_COSTS[current_index + 1]
+        cost_items = cost["items"]
+        cost_coins = cost["coins"]
+
+        # Show upgrade preview
+        cost_str = ", ".join(f"{qty} {item}" for item,
+                             qty in cost_items.items())
+        print(
+            f"\nUpgrade: {current_value} → {Fore.GREEN}{next_tier}{Fore.RESET}")
+        print(f"Cost: {cost_str} + {cost_coins} coins")
+        confirm = input("Confirm upgrade? (y/n): ").strip().lower()
+
+        if confirm != "y":
+            print("Upgrade cancelled.")
+            return
+
+        # Check coins
+        if p_coins < cost_coins:
+            print(
+                f"{Fore.RED}Not enough coins! You have {p_coins} but need {cost_coins}.{Fore.RESET}")
+            return
+
+        # Check items
+        item_filepath = "Database/itemdata.json"
+        existing_items = []
+        if os.path.exists(item_filepath):
+            with open(item_filepath, "r") as f:
+                content = f.read()
+                if content.strip():
+                    existing_items = json.loads(content)
+
+        for required_item, required_qty in cost_items.items():
+            for owned_item in existing_items:
+                if owned_item["item_name"] == required_item:
+                    if owned_item["quantity"] < required_qty:
+                        print(
+                            f"{Fore.RED}Not enough {required_item}! You have {owned_item['quantity']} but need {required_qty}.{Fore.RESET}")
+                        return
+                    break
+            else:
+                print(f"{Fore.RED}You don't have any {required_item}!{Fore.RESET}")
+                return
+
+        # Deduct coins
+        self.spend_money(cost_coins)
+
+        # Deduct items
+        for item_name, qty in cost_items.items():
+            for owned_item in existing_items:
+                if owned_item["item_name"] == item_name:
+                    owned_item["quantity"] -= qty
+                    break
+        existing_items = [
+            item for item in existing_items if item["quantity"] > 0]
+        with open(item_filepath, "w") as f:
+            json.dump(existing_items, f, indent=4)
+
+        # Apply upgrade
+        selected_card[card_key] = next_tier
+
+        # Recalculate worth
+        new_worth = (
+            RARITY_WORTH[selected_card["rarity"]] *
+            BORDER_WORTH[selected_card["border"]] *
+            QUALITY_WORTH[selected_card["image_quality"]]
+        )
+        selected_card["worth"] = round(new_worth, 2)
+
+        # Save updated cards
+        with open(filepath, "w") as f:
+            json.dump(cards, f, indent=4)
+
+        print(f"\n{Fore.GREEN}Upgrade successful!{Fore.RESET}")
+        print(f"{selected_card['name']} | Rarity: {selected_card['rarity']} | Border: {selected_card['border']} | Quality: {selected_card['image_quality']} | Worth: ${selected_card['worth']:.2f}")
+
     def startup(self):
         global startup
         startup = datetime.now().strftime("%H:%M:%S")
@@ -533,17 +691,18 @@ def main():
     p.startup()
     clear_screen()
     while True:
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.13.0\n")
+        clear_screen()
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.14.0\n")
         print("NOTE: This update only partially saves your game data. A few more patches! \n", file=sys.stderr)
         time.sleep(2)
         print(
             "1. Open a pack\n"
-            "2. Player Stats\n"
+            "2. Player Stats (NEW!)\n"
             "3. View Inventory/Collection\n"
-            "4. Daily Reward (INACTIVE)\n"
-            "5. Modify Cards (INACTIVE)\n"
-            "6. Special Events (INACTIVE)\n"
-            "7. Shop \n"
+            "4. Daily Reward (v2.0.0-beta)\n"
+            "5. Modify Cards (NEW!)\n"
+            "6. Special Events (v2.0.0-beta)\n"
+            "7. Shop (NEW!) \n"
             "8. Exit\n"
         )
         x = input("Choose an option: ")
@@ -564,21 +723,23 @@ def main():
                 p.add_cards(cards)
                 time.sleep(1)
                 p.gain_exp(100)
+                p.add_coins(200)
                 print()  # Blank Line
                 input("Press ENTER to continue...")
             elif c == '2':
                 item = Ipack.open_Ipack()
                 print("Nice! Here are the items you got:")
                 time.sleep(1.5)
-            for x, items in enumerate(item):
-                print(f"{x+1}. {items.Icard}")
-                item_counts = {}
+                for x, items in enumerate(item):
+                    print(f"{x+1}. {items.Icard}")
+                    item_counts = {}
                 for card in item:
                     name = card.Icard
                     item_counts[name] = item_counts.get(name, 0) + 1
-            print("You may use these items to upgrade your Pokemon © cards.")
-            p.auto_addItems(item_counts)
-            input("Press ENTER to continue playing...")
+                print("You may use these items to upgrade your Pokemon © cards.")
+                p.add_coins(100)
+                p.auto_addItems(item_counts)
+                input("Press ENTER to continue playing...")
         elif x == "2":
             p.show_stats()
             input("Press ENTER to continue...")
@@ -598,13 +759,20 @@ def main():
                 pass
         elif x == "4":
             print("Updating..")
+            time.sleep(2)
         elif x == "5":
-            print("UPDATING")  # CUS
-            input("Press ENTER to continue playing...")
+            coins_filepath = "Database/coinsdata.json"
+            current_coins = 0
+            if os.path.exists(coins_filepath):
+                with open(coins_filepath, "r") as f:
+                    content = f.read()
+                    if content.strip():
+                        current_coins = json.loads(content)["coins"]
+
+            p.upgrade_card(current_coins)
         elif x == "6":
             print("Still working on this one!")
             time.sleep(2)
-            main()
         elif x == "7":
             shop.cts(p)
         elif x == "8":
