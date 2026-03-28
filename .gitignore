@@ -1,3 +1,6 @@
 # Testings
 
 Database/
+build/
+dist/
+*.spec
