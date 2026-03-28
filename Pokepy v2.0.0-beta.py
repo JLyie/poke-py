@@ -6,7 +6,7 @@ import time
 import random
 import colorama
 from colorama import Fore, init, Back
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -22,6 +22,36 @@ UPGRADE_COSTS = {
     1: {"items": {"Magical Powder": 2}, "coins": 10},
     2: {"items": {"Fiery Leather": 2}, "coins": 25},
     3: {"items": {"Void Crystal": 1, "Quantum Ball": 2}, "coins": 50}
+}
+
+SPECIAL_EVENTS = [
+    {
+        "name": "Coin Frenzy",
+        "type": "bonus_coins",
+        "description": "All coin rewards are doubled!",
+        "multiplier": 2
+    },
+    {
+        "name": "Rare Drop Festival",
+        "type": "rare_items",
+        "description": "Rare items drop more frequently from chests!",
+        "bonus_items": {"Void Crystal": 1, "Quantum Ball": 2}
+    },
+    {
+        "name": "Flash Sale",
+        "type": "limited_shop",
+        "description": "Special limited items available in the shop!",
+        "limited_items": {
+            "Mystery Box": {"cost": {"Magical Powder": 3}, "reward": {"Void Crystal": 1, "Celestial Wand": 1}},
+            "Booster Bundle": {"cost": {"Fiery Leather": 2}, "reward": {"Quantum Ball": 3, "Magical Powder": 5}}
+        }
+    }
+]
+
+EVENT_DURATIONS = {
+    "short": 1/24,    # 1 hour in days
+    "medium": 1,      # 24 hours
+    "long": 3         # 3 days
 }
 
 
@@ -248,8 +278,8 @@ class Player:
         os.makedirs("Database", exist_ok=True)
         filepath = "Database/expdata.json"
         data = {
-            "level": 1,
-            "exp": 0
+            "level": self.level,
+            "exp": self.exp
         }
 
         with open(filepath, "w") as f:
@@ -274,7 +304,10 @@ class Player:
                 self.exp = data.get("exp", 0)
 
     # UPDATED add_coins now functioning *upd-003.cd-220326
-    def add_coins(self, amount):
+    def add_coins(self, amount, event=None):
+        if event:
+            from __main__ import SpecialEvents
+            amount = SpecialEvents().apply_bonus_coins(amount, event)
         os.makedirs("Database", exist_ok=True)
         FILEPATH = "Database/coinsdata.json"
 
@@ -495,6 +528,100 @@ class Player:
         print(f"\n{Fore.GREEN}Upgrade successful!{Fore.RESET}")
         print(f"{selected_card['name']} | Rarity: {selected_card['rarity']} | Border: {selected_card['border']} | Quality: {selected_card['image_quality']} | Worth: ${selected_card['worth']:.2f}")
 
+    def claim_daily(self, Cpack, Ipack):
+        filepath = "Database/dailydata.json"
+        os.makedirs("Database", exist_ok=True)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Load existing data
+        existing_data = {"last_claimed": None}
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                content = f.read()
+                if content.strip():
+                    existing_data = json.loads(content)
+
+        # Check if already claimed today
+        if existing_data["last_claimed"] == today:
+            print(
+                f"{Fore.YELLOW}You've already claimed your daily reward today!{Fore.RESET}")
+            print(f"{Fore.YELLOW}Come back tomorrow for another reward!{Fore.RESET}")
+            time.sleep(2)
+            return
+
+        print(f"{Fore.CYAN}=== DAILY REWARD ==={Fore.RESET}")
+        print("Opening your daily reward...")
+        time.sleep(1.5)
+
+        # Randomly pick a reward tier
+        reward_tiers = [
+            {
+                "name": "Small",
+                "coins": random.randint(10, 30),
+                "exp": random.randint(10, 30),
+                "items": {random.choice(["Magical Powder", "Fiery Leather"]): random.randint(1, 3)},
+                "cards": 0
+            },
+            {
+                "name": "Medium",
+                "coins": random.randint(30, 70),
+                "exp": random.randint(30, 60),
+                "items": {random.choice(["Quantum Ball", "Astral Wand"]): random.randint(1, 2)},
+                "cards": 1
+            },
+            {
+                "name": "Large",
+                "coins": random.randint(70, 150),
+                "exp": random.randint(60, 100),
+                "items": {
+                    random.choice(["Void Crystal", "Celestial Wand"]): 1,
+                    random.choice(["Magical Powder", "Quantum Ball"]): random.randint(2, 5)
+                },
+                "cards": 2
+            }
+        ]
+
+        # Weighted random tier selection
+        tier = random.choices(
+            reward_tiers,
+            weights=[50, 35, 15],  # Small=50%, Medium=35%, Large=15%
+            k=1
+        )[0]
+
+        print(f"{Fore.CYAN}You got a {tier['name']} reward!{Fore.RESET}\n")
+
+        # Give coins
+        self.add_coins(tier["coins"])
+
+        # Give EXP
+        self.gain_exp(tier["exp"])
+
+        # Give items
+        self.auto_addItems(tier["items"])
+        for item_name, qty in tier["items"].items():
+            print(f"{Fore.GREEN}+{qty} {item_name}{Fore.RESET}")
+
+        # Give card packs
+        if tier["cards"] > 0:
+            print(
+                f"\n{Fore.CYAN}Opening {tier['cards']} card pack(s)...{Fore.RESET}")
+            for _ in range(tier["cards"]):
+                time.sleep(1)
+                cards = Cpack.open_pack()
+                self.add_cards(cards)
+                for card in cards:
+                    print(f"{Fore.GREEN}+{card.name} ({card.rarity}){Fore.RESET}")
+
+        # Save claimed date
+        existing_data["last_claimed"] = today
+        with open(filepath, "w") as f:
+            json.dump(existing_data, f, indent=4)
+
+        print(f"\n{Fore.CYAN}=== REWARD CLAIMED! ==={Fore.RESET}")
+        print("Come back tomorrow for another reward!")
+        time.sleep(2)
+
     def startup(self):
         global startup
         startup = datetime.now().strftime("%H:%M:%S")
@@ -539,7 +666,7 @@ class Shop:
         time.sleep(2)
         return True
 
-    def cts(self, p):  # pass the Player object so we can update inventory
+    def cts(self, p, events, active_event):
         print("Welcome to the Shop, player!\n")
         print("CURRENT STOCKS")
         print(f"1. Astral Wand        - 5 Magical Powder, 2 Fiery Leather")
@@ -552,28 +679,55 @@ class Shop:
             print(
                 f"Celestial Wand costs: 3 Fiery Leather, 5 Magical Powder, 1 Quantum Ball\n")
 
-        inp = input("Please select an item to trade: ")
+        # Show limited items if Flash Sale is active
+        limited = events.get_limited_shop_items(active_event)
+        if limited:
+            print(f"{Fore.CYAN}=== FLASH SALE - LIMITED ITEMS ==={Fore.RESET}")
+            for i, (item_name, details) in enumerate(limited.items(), start=5):
+                cost_str = ", ".join(f"{qty} {item}" for item,
+                                     qty in details["cost"].items())
+                print(f"{i}. {item_name} - {cost_str}")
+            print()
 
-        # Define shop items as a dict for clean access
+        # Define shop items
         shop_items = {
-            "1": {
-                "name": "Astral Wand",
-                "cost": {"Magical Powder": 5, "Fiery Leather": 2}
-            },
-            "2": {
-                "name": "Upgrade Card",
-                "cost": {"Quantum Ball": 2}
-            },
-            "3": {
-                "name": "Chest",
-                "cost": {"Magical Powder": 3}
-            },
-            "4": {
-                "name": "Celestial Wand",
-                "cost": {"Fiery Leather": 3, "Magical Powder": 5, "Quantum Ball": 1}
-            }
+            "1": {"name": "Astral Wand", "cost": {"Magical Powder": 5, "Fiery Leather": 2}},
+            "2": {"name": "Upgrade Card", "cost": {"Quantum Ball": 2}},
+            "3": {"name": "Chest", "cost": {"Magical Powder": 3}},
+            "4": {"name": "Celestial Wand", "cost": {"Fiery Leather": 3, "Magical Powder": 5, "Quantum Ball": 1}}
         }
 
+        inp = input("Please select an item to trade: ")
+
+        # Handle limited shop items
+        if limited:
+            limited_keys = {str(i): name for i, name in enumerate(
+                limited.keys(), start=5)}
+            if inp in limited_keys:
+                limited_name = limited_keys[inp]
+                limited_details = limited[limited_name]
+
+                cost_str = ", ".join(f"{qty} {item}" for item,
+                                     qty in limited_details["cost"].items())
+                print(f"\nYou selected: {limited_name}")
+                print(f"Cost: {cost_str}")
+                confirm = input("Confirm trade? (y/n): ").strip().lower()
+
+                if confirm != "y":
+                    print("Trade cancelled.")
+                    return
+
+                if not self.verify(limited_name, limited_details["cost"]):
+                    return
+
+                self.deduct_items(limited_details["cost"])
+                p.auto_addItems(limited_details["reward"])
+                print(
+                    f"{Fore.GREEN}You successfully traded for {limited_name}!{Fore.RESET}")
+                time.sleep(3)
+                return
+
+        # Handle regular shop items
         if inp not in shop_items:
             print("Item not found. Try again!")
             time.sleep(2)
@@ -584,16 +738,11 @@ class Shop:
                 f"{Fore.RED}Celestial Wand is not on stock. Try again later!{Fore.RESET}")
             time.sleep(2)
             return
-        elif inp == "3":
-            selected = shop_items["3"]
-            name = selected["name"]
-            cost = selected["cost"]
 
         selected = shop_items[inp]
         name = selected["name"]
         cost = selected["cost"]
 
-        # Show cost and ask confirmation
         cost_str = ", ".join(f"{qty} {item}" for item, qty in cost.items())
         print(f"\nYou selected: {name}")
         print(f"Cost: {cost_str}")
@@ -603,15 +752,15 @@ class Shop:
             print("Trade cancelled.")
             return
 
-        # Verify player has enough items
         if not self.verify(name, cost):
-            return  # verify already prints the error message
+            return
 
-        # Deduct items from inventory
+        if inp == "3":
+            self.deduct_items(cost)
+            self.open_chest(p, active_event)
+            return
+
         self.deduct_items(cost)
-        self.open_chest(p)
-
-        # Add bought item to inventory
         p.auto_addItems({name: 1})
         print(f"{Fore.GREEN}You successfully traded for {name}!{Fore.RESET}")
 
@@ -638,7 +787,7 @@ class Shop:
         with open(filepath, "w") as f:
             json.dump(existing_data, f, indent=4)
 
-    def open_chest(self, p):
+    def open_chest(self, p, event=None):
         print(f"\n{Fore.YELLOW}Opening chest...{Fore.RESET}")
         time.sleep(1.5)
 
@@ -662,6 +811,9 @@ class Shop:
         for item in loot:
             loot_counts[item] = loot_counts.get(item, 0) + 1
 
+        if event:
+            loot_counts = SpecialEvents().apply_rare_drops(loot_counts, event)
+
         # Display loot
         print(f"{Fore.YELLOW}You got:{Fore.RESET}")
         for item_name, qty in loot_counts.items():
@@ -676,6 +828,130 @@ class Shop:
         print(f"{Fore.GREEN} Items added to your inventory!{Fore.RESET}")
 
 
+class SpecialEvents:
+    def __init__(self):
+        self.filepath = "Database/eventdata.json"
+        os.makedirs("Database", exist_ok=True)
+
+    def _load_event(self):
+        if not os.path.exists(self.filepath):
+            return None
+        with open(self.filepath, "r") as f:
+            content = f.read()
+            if content.strip():
+                return json.loads(content)
+        return None
+
+    def _save_event(self, event_data):
+        with open(self.filepath, "w") as f:
+            json.dump(event_data, f, indent=4)
+
+    def check_event(self):
+        existing = self._load_event()
+        now = datetime.now()
+
+        # Check if current event is still active
+        if existing and existing.get("active"):
+            end_time = datetime.strptime(
+                existing["end_time"], "%Y-%m-%d %H:%M:%S")
+            if now < end_time:
+                return existing  # event still running
+            else:
+                # Event expired
+                print(
+                    f"{Fore.YELLOW}The {existing['name']} event has ended!{Fore.RESET}")
+                existing["active"] = False
+                self._save_event(existing)
+
+        # Random chance to trigger a new event (30% chance per day)
+        if random.random() < 0.30:
+            return self.start_event()
+
+        return None
+
+    def start_event(self):
+        # Pick random event and duration
+        event = random.choice(SPECIAL_EVENTS)
+        duration_key = random.choice(["short", "medium", "long"])
+        duration_days = EVENT_DURATIONS[duration_key]
+
+        now = datetime.now()
+        end_time = now + timedelta(days=duration_days)
+
+        duration_display = {
+            "short": "1 hour",
+            "medium": "24 hours",
+            "long": "3 days"
+        }
+
+        event_data = {
+            "name": event["name"],
+            "type": event["type"],
+            "description": event["description"],
+            "duration": duration_display[duration_key],
+            "start_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "active": True,
+            "data": event
+        }
+
+        self._save_event(event_data)
+
+        print(f"\n{Fore.CYAN}=== SPECIAL EVENT STARTED ==={Fore.RESET}")
+        print(f"{Fore.CYAN}{event['name']}{Fore.RESET}")
+        print(f"{event['description']}")
+        print(f"Duration: {duration_display[duration_key]}")
+        print(f"{Fore.CYAN}============================={Fore.RESET}\n")
+        time.sleep(2)
+
+        return event_data
+
+    def show_active_event(self):
+        existing = self._load_event()
+        if not existing or not existing.get("active"):
+            print(f"{Fore.YELLOW}No special event is currently active.{Fore.RESET}")
+            return
+
+        now = datetime.now()
+        end_time = datetime.strptime(existing["end_time"], "%Y-%m-%d %H:%M:%S")
+
+        if now >= end_time:
+            print(f"{Fore.YELLOW}No special event is currently active.{Fore.RESET}")
+            return
+
+        remaining = end_time - now
+        hours = int(remaining.total_seconds() // 3600)
+        minutes = int((remaining.total_seconds() % 3600) // 60)
+
+        print(f"\n{Fore.CYAN}=== ACTIVE EVENT ==={Fore.RESET}")
+        print(f"Event    : {existing['name']}")
+        print(f"Details  : {existing['description']}")
+        print(f"Time left: {hours}h {minutes}m")
+        print(f"{Fore.CYAN}===================={Fore.RESET}\n")
+        time.sleep(2)
+
+    def apply_bonus_coins(self, amount, event):
+        if event and event["type"] == "bonus_coins":
+            multiplier = event["data"]["multiplier"]
+            bonus = amount * (multiplier - 1)
+            print(f"{Fore.CYAN}Coin Frenzy! +{bonus} bonus coins!{Fore.RESET}")
+            return amount * multiplier
+        return amount
+
+    def apply_rare_drops(self, loot_counts, event):
+        if event and event["type"] == "rare_items":
+            bonus = event["data"]["bonus_items"]
+            for item, qty in bonus.items():
+                loot_counts[item] = loot_counts.get(item, 0) + qty
+                print(f"{Fore.CYAN}Rare Drop Festival! +{qty} {item}!{Fore.RESET}")
+        return loot_counts
+
+    def get_limited_shop_items(self, event):
+        if event and event["type"] == "limited_shop":
+            return event["data"]["limited_items"]
+        return {}
+
+
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -684,24 +960,26 @@ def clear_screen():
 
 def main():
 
-    pack = Pack()
+    Cpack = Pack()
     p = Player()
     Ipack = ItemPack()
     shop = Shop()
+    events = SpecialEvents()
+    active_event = events.check_event()
     p.startup()
     clear_screen()
     while True:
         clear_screen()
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 1.14.0\n")
-        print("NOTE: This update only partially saves your game data. A few more patches! \n", file=sys.stderr)
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.0.0-beta\n")
+        print("NOTE: This game is currently in the BETA version. The stable version releases on March 31 2026 | 3:00 PM PhST \n", file=sys.stderr)
         time.sleep(2)
         print(
             "1. Open a pack\n"
             "2. Player Stats (NEW!)\n"
             "3. View Inventory/Collection\n"
-            "4. Daily Reward (v2.0.0-beta)\n"
+            "4. Daily Reward (NEW!)\n"
             "5. Modify Cards (NEW!)\n"
-            "6. Special Events (v2.0.0-beta)\n"
+            "6. Special Events (TESTING)\n"
             "7. Shop (NEW!) \n"
             "8. Exit\n"
         )
@@ -713,7 +991,7 @@ def main():
             )
             c = input("Choose a pack: ")
             if c == '1':
-                cards, pack_value = pack.open_pack()
+                cards, pack_value = Cpack.open_pack()
                 print("Nice! You opened a pack. Here's what you got:")
                 time.sleep(2)
                 for i, card in enumerate(cards):
@@ -730,9 +1008,9 @@ def main():
                 item = Ipack.open_Ipack()
                 print("Nice! Here are the items you got:")
                 time.sleep(1.5)
+                item_counts = {}
                 for x, items in enumerate(item):
                     print(f"{x+1}. {items.Icard}")
-                    item_counts = {}
                 for card in item:
                     name = card.Icard
                     item_counts[name] = item_counts.get(name, 0) + 1
@@ -758,8 +1036,7 @@ def main():
             else:
                 pass
         elif x == "4":
-            print("Updating..")
-            time.sleep(2)
+            p.claim_daily(Cpack, Ipack)
         elif x == "5":
             coins_filepath = "Database/coinsdata.json"
             current_coins = 0
@@ -771,10 +1048,18 @@ def main():
 
             p.upgrade_card(current_coins)
         elif x == "6":
-            print("Still working on this one!")
-            time.sleep(2)
+            events.show_active_event()
+
+            if active_event and active_event["type"] == "limited shop":
+                print(
+                    f"{Fore.CYAN}Flash Sale is active! Visit the shop to see limited items!")
+                go_shop = input("Go to shop now? (y/n): ").strip().lower()
+                if go_shop == "y":
+                    shop.cts(p, events, active_event)
+
+            input("Press ENTER to continue...")
         elif x == "7":
-            shop.cts(p)
+            shop.cts(p, events, active_event)
         elif x == "8":
             print("Thank you for playing! See you again!")
             time.sleep(2)
