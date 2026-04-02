@@ -19,14 +19,16 @@ The sole purpose of this project/program being in GitHub is to learn more by rec
 ## Features
 
 - About & Credits
-- Card Trade & Sell system
+- Card Trade & Sell
 - Anti-crash function
 - Error logging
 
 ## Bug Fixes
 
 - Fixed the JSON saving for expdata.json
-- +
+- Fixed constants & variables to match with other constants/variables
+- Fixed texts
+- Minor UI changes
 
 ## Contact
 

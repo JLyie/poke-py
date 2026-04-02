@@ -1227,7 +1227,7 @@ def main():
                     for card in item:
                         name = card.Icard
                         item_counts[name] = item_counts.get(name, 0) + 1
-                    print("You may use these items to upgrade your Pokemon © cards.")
+                    print("You may use these items to upgrade your cards.")
                     p.gain_exp(50)
                     coins2 = events.apply_bonus_coins(100, active_event)
                     p.add_coins(coins2)
