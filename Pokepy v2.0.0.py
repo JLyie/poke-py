@@ -10,7 +10,12 @@ from datetime import datetime, timedelta
 import json
 import traceback
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+if getattr(sys, 'frozen', False):
+    # Running as exe
+    os.chdir(os.path.dirname(sys.executable))
+else:
+    # Running as .py in VS Code
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 RARITY_TIERS = ["Common", "Uncommon", "Rare", "Legendary"]
 BORDER_TIERS = ["Non-Holo", "Foil", "Holo", "Rainbow"]
 QUALITY_TIERS = ["Poor", "Good", "Excellent", "Perfect"]
