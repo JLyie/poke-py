@@ -8,20 +8,21 @@ import colorama
 from colorama import Fore, init, Back
 from datetime import datetime, timedelta
 import json
+import traceback
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 RARITY_TIERS = ["Common", "Uncommon", "Rare", "Legendary"]
-BORDER_TIERS = ["Normal", "Foil", "Holo", "Rainbow"]
+BORDER_TIERS = ["Non-Holo", "Foil", "Holo", "Rainbow"]
 QUALITY_TIERS = ["Poor", "Good", "Excellent", "Perfect"]
 
-RARITY_WORTH = {"Common": 1, "Uncommon": 3, "Rare": 10, "Legendary": 30}
-BORDER_WORTH = {"Normal": 1, "Foil": 2, "Holo": 4, "Rainbow": 8}
-QUALITY_WORTH = {"Poor": 0.5, "Good": 1, "Excellent": 2, "Perfect": 4}
+RARITY_WORTH = {"Common": 1, "Uncommon": 3, "Rare": 20, "Legendary": 100}
+BORDER_WORTH = {"Non-Holo": 1.5, "Foil": 2, "Holo": 3.5, "Rainbow": 8}
+QUALITY_WORTH = {"Poor": 0.5, "Good": 1, "Excellent": 2.6, "Perfect": 4}
 
 UPGRADE_COSTS = {
-    1: {"items": {"Magical Powder": 2}, "coins": 10},
-    2: {"items": {"Fiery Leather": 2}, "coins": 25},
-    3: {"items": {"Void Crystal": 1, "Quantum Ball": 2}, "coins": 50}
+    1: {"items": {"Upgrade Card": 1, "Magical Powder": 2}, "coins": 10},
+    2: {"items": {"Upgrade Card": 1, "Fiery Leather": 2}, "coins": 25},
+    3: {"items": {"Upgrade Card": 2, "Void Crystal": 1, "Quantum Ball": 2}, "coins": 50}
 }
 
 SPECIAL_EVENTS = [
@@ -83,7 +84,7 @@ class Pack:
             "Common": 0.6,
             "Uncommon": 0.25,
             "Rare": 0.1,
-            "legendary": 0.05
+            "Legendary": 0.05
         }
         self.borders = ["Holo", "Non-Holo", "Foil"]
         self.image_qualities = ["Good", "Excellent", "Mint"]
@@ -109,13 +110,17 @@ class Pack:
         elif rarity == "Legendary":
             worth = 100
         if border == "Holo":
-            worth *= 1.5
-        elif border == "Foil":
             worth *= 2
+        elif border == "Foil":
+            worth *= 1.5
+        elif border == "Non-Holo":
+            worth *= 1
         if image_quality == "Excellent":
+            worth *= 1.5
+        elif image_quality == "Good":
             worth *= 1.2
         elif image_quality == "Mint":
-            worth *= 1.5
+            worth *= 1.7
         return round(worth, 2)
 
     def open_pack(self):
@@ -293,7 +298,7 @@ class Player:
         if not os.path.exists(filepath):
             default_data = {"level": 1, "exp": 0}
             with open(filepath, "w") as f:
-                json.dump(filepath, f, indent=4)
+                json.dump(default_data, f, indent=4)
             return
 
         with open(filepath, "r") as f:
@@ -608,7 +613,7 @@ class Player:
                 f"\n{Fore.CYAN}Opening {tier['cards']} card pack(s)...{Fore.RESET}")
             for _ in range(tier["cards"]):
                 time.sleep(1)
-                cards = Cpack.open_pack()
+                cards, x = Cpack.open_pack()
                 self.add_cards(cards)
                 for card in cards:
                     print(f"{Fore.GREEN}+{card.name} ({card.rarity}){Fore.RESET}")
@@ -621,6 +626,195 @@ class Player:
         print(f"\n{Fore.CYAN}=== REWARD CLAIMED! ==={Fore.RESET}")
         print("Come back tomorrow for another reward!")
         time.sleep(2)
+
+    def show_about(self):
+        print("\n=== ABOUT POKEPY ===")
+        print("Game        : PokePy")
+        print("Version     : v2.0.0")
+        print("Developer   : JL (PyDevelopments)")
+        print("Description : A terminal-based card collecting game.")
+        print()
+        print("=== VERSION HISTORY ===")
+        print("v1.8.0      : Initial commit")
+        print("v1.11.13    : Shop system added")
+        print("v1.12.0     : View collection and inventory")
+        print("v1.13.0     : Chest system added")
+        print("v2.0.0-alpha: Card upgrade system, daily rewards")
+        print("v2.0.0-beta : Special events, bug fixes, exe packaging")
+        print("v2.0.0      : Stable release")
+        print("====================\n")
+
+    def trade_sell_cards(self):
+        filepath = "Database/carddata.json"
+        trade_filepath = "Database/tradedata.json"
+        os.makedirs("Database", exist_ok=True)
+
+        if not os.path.exists(filepath):
+            print("No card collection found.")
+            time.sleep(2)
+            return
+
+        with open(filepath, "r") as f:
+            content = f.read()
+            if not content.strip():
+                print("Your card collection is empty.")
+                time.sleep(2)
+                return
+            cards = json.loads(content)
+
+        # Load trade data
+        today = datetime.now().strftime("%Y-%m-%d")
+        trade_data = {"date": today, "trades_left": 2}
+        if os.path.exists(trade_filepath):
+            with open(trade_filepath, "r") as f:
+                content = f.read()
+                if content.strip():
+                    trade_data = json.loads(content)
+                    # Reset if it's a new day
+                    if trade_data["date"] != today:
+                        trade_data = {"date": today, "trades_left": 2}
+
+        print("\n=== CARD TRADING & SELLING ===")
+        print("1. Sell a card for coins")
+        print(
+            f"2. Trade a card with BOT ({trade_data['trades_left']}/2 trades left today)")
+        opt = input("Choose an option (0 to cancel): ").strip()
+
+        if opt == "0":
+            time.sleep(2)
+            return
+
+        # Show collection
+        print("\nYour Card Collection:")
+        for i, card in enumerate(cards, start=1):
+            print(
+                f"{i}. {card['name']} | Rarity: {card['rarity']} | Border: {card['border']} | Quality: {card['image_quality']} | Worth: ${card['worth']:.2f}")
+        print()
+
+        if opt == "1":
+            # Sell a card
+            try:
+                choice = int(input("Select a card to sell (0 to cancel): "))
+                if choice == 0:
+                    return
+                if choice < 1 or choice > len(cards):
+                    print("Invalid choice.")
+                    time.sleep(2)
+                    return
+            except ValueError:
+                print("Please enter a valid number.")
+                time.sleep(2)
+                return
+
+            selected = cards[choice - 1]
+            sell_price = round(selected["worth"] * 0.75, 2)
+
+            print(f"\nSelected: {selected['name']}")
+            print(
+                f"Sell price: ${sell_price} (75% of ${selected['worth']:.2f})")
+            confirm = input("Confirm sell? (y/n): ").strip().lower()
+
+            if confirm != "y":
+                print("Sell cancelled.")
+                time.sleep(2)
+                return
+
+            cards.pop(choice - 1)
+            with open(filepath, "w") as f:
+                json.dump(cards, f, indent=4)
+
+            self.add_coins(int(sell_price))
+            print(
+                f"{Fore.GREEN}Successfully sold {selected['name']} for ${sell_price}!{Fore.RESET}")
+
+        elif opt == "2":
+            # Check trades left
+            if trade_data["trades_left"] <= 0:
+                print(
+                    f"{Fore.RED}No trades left today! Come back tomorrow.{Fore.RESET}")
+                time.sleep(2)
+                return
+
+            # Select card to trade away
+            try:
+                choice = int(
+                    input("Select a card to trade away (0 to cancel): "))
+                if choice == 0:
+                    time.sleep(2)
+                    return
+                if choice < 1 or choice > len(cards):
+                    print("Invalid choice.")
+                    time.sleep(2)
+                    return
+            except ValueError:
+                print("Please enter a valid number.")
+                time.sleep(2)
+                return
+
+            your_card = cards[choice - 1]
+
+            # Generate random Bot card
+            npc_rarities = {
+                "Common": ["Common Balbuzer", "Common Spookie", "Common Fireguard"],
+                "Uncommon": ["Uncommon Dreamy", "Uncommon Jiggleboo", "Uncommon Peckoo"],
+                "Rare": ["Rare Pikagloo", "Rare Grengie", "Rare Mewmew"],
+                "Legendary": ["Legendary Fireguard", "Legendary Dragoneer"]
+            }
+            npc_borders = ["Non-Holo", "Foil", "Holo", "Rainbow"]
+            npc_qualities = ["Poor", "Good", "Excellent", "Perfect"]
+
+            npc_rarity = random.choice(list(npc_rarities.keys()))
+            npc_name = random.choice(npc_rarities[npc_rarity])
+            npc_border = random.choice(npc_borders)
+            npc_quality = random.choice(npc_qualities)
+            npc_worth = round(
+                RARITY_WORTH[npc_rarity] *
+                BORDER_WORTH[npc_border] *
+                QUALITY_WORTH[npc_quality], 2
+            )
+
+            npc_card = {
+                "name": npc_name,
+                "rarity": npc_rarity,
+                "border": npc_border,
+                "image_quality": npc_quality,
+                "worth": npc_worth
+            }
+
+            print(
+                f"\nYou are trading: {your_card['name']} (Worth: ${your_card['worth']:.2f})")
+            print(f"\nNPC offers: {npc_card['name']}")
+            print(f"  Rarity  : {npc_card['rarity']}")
+            print(f"  Border  : {npc_card['border']}")
+            print(f"  Quality : {npc_card['image_quality']}")
+            print(f"  Worth   : ${npc_card['worth']:.2f}")
+
+            if npc_worth < your_card["worth"]:
+                print(
+                    f"{Fore.YELLOW}Warning! Bot's card is worth less than yours!{Fore.RESET}")
+
+            confirm = input("\nAccept trade? (y/n): ").strip().lower()
+            if confirm != "y":
+                print("Trade cancelled.")
+                return
+
+            # Swap cards
+            cards[choice - 1] = npc_card
+            with open(filepath, "w") as f:
+                json.dump(cards, f, indent=4)
+
+            # Update trades left
+            trade_data["trades_left"] -= 1
+            with open(trade_filepath, "w") as f:
+                json.dump(trade_data, f, indent=4)
+
+            print(
+                f"{Fore.GREEN}Successfully traded {your_card['name']} for {npc_card['name']}!{Fore.RESET}")
+            print(
+                f"{Fore.YELLOW}{trade_data['trades_left']}/2 trades remaining today.{Fore.RESET}")
+
+        else:
+            print("Invalid option.")
 
     def startup(self):
         global startup
@@ -715,6 +909,7 @@ class Shop:
 
                 if confirm != "y":
                     print("Trade cancelled.")
+                    time.sleep(2)
                     return
 
                 if not self.verify(limited_name, limited_details["cost"]):
@@ -956,114 +1151,149 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
+def log_error(error, location="Unknown"):
+    os.makedirs("Database/upds", exist_ok=True)
+    filepath = "Database/upds/Pokepy Logs.txt"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with open(filepath, "a") as f:
+        f.write(f"[{timestamp}] ERROR in {location}:\n")
+        f.write(f"{traceback.format_exc()}\n")
+        f.write("-" * 50 + "\n")
+
+    print(f"{Fore.RED}Something went wrong! The error has been logged.{Fore.RESET}")
+    print(f"{Fore.RED}Please report this to lugasan.pydevelopments@gmail.com{Fore.RESET}")
+    time.sleep(2)
+
+
 # MAIN
 
 def main():
-
     Cpack = Pack()
     p = Player()
     Ipack = ItemPack()
     shop = Shop()
     events = SpecialEvents()
     active_event = events.check_event()
+    p.load_progress()
     p.startup()
-    clear_screen()
     while True:
         clear_screen()
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.0.0-beta\n")
-        print("NOTE: This game is currently in the BETA version. The stable version releases on March 31 2026 | 3:00 PM PhST \n", file=sys.stderr)
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.0.0")
+        print("The official stable release of v2.0.0 ! \n", file=sys.stderr)
         time.sleep(2)
         print(
             "1. Open a pack\n"
-            "2. Player Stats (NEW!)\n"
+            "2. Player Stats\n"
             "3. View Inventory/Collection\n"
-            "4. Daily Reward (NEW!)\n"
-            "5. Modify Cards (NEW!)\n"
-            "6. Special Events (TESTING)\n"
-            "7. Shop (NEW!) \n"
-            "8. Exit\n"
+            "4. Daily Reward\n"
+            "5. Modify Cards\n"
+            "6. Special Events\n"
+            "7. Shop\n"
+            "8. Card Trade & Selling (NEW!)\n"
+            "9. About & Credits (NEW!)\n"
+            "10. Exit"
         )
         x = input("Choose an option: ")
-        if x == '1':
-            print(
-                "1. Card Pack\n"
-                "2. Item Pack\n"
-            )
-            c = input("Choose a pack: ")
-            if c == '1':
-                cards, pack_value = Cpack.open_pack()
-                print("Nice! You opened a pack. Here's what you got:")
-                time.sleep(2)
-                for i, card in enumerate(cards):
-                    print(f"{i+1}. {card}")
-                print(f"Total pack value: ${pack_value}")
-                time.sleep(2)
-                p.add_cards(cards)
-                time.sleep(1)
-                p.gain_exp(100)
-                p.add_coins(200)
-                print()  # Blank Line
-                input("Press ENTER to continue...")
-            elif c == '2':
-                item = Ipack.open_Ipack()
-                print("Nice! Here are the items you got:")
-                time.sleep(1.5)
-                item_counts = {}
-                for x, items in enumerate(item):
-                    print(f"{x+1}. {items.Icard}")
-                for card in item:
-                    name = card.Icard
-                    item_counts[name] = item_counts.get(name, 0) + 1
-                print("You may use these items to upgrade your Pokemon © cards.")
-                p.add_coins(100)
-                p.auto_addItems(item_counts)
-                input("Press ENTER to continue playing...")
-        elif x == "2":
-            p.show_stats()
-            input("Press ENTER to continue...")
-        elif x == "3":
-            print(
-                "1. View Card Collection\n"
-                "2. View Item Inventory\n"
-            )
-            opt = input("Please pick an option: ")
-            if opt == '1':
-                p.view_collection()
-                input("Press ENTER to continue playing...")
-            elif opt == '2':
-                p.view_items()
-                input("Press ENTER to continue playing...")
-            else:
-                pass
-        elif x == "4":
-            p.claim_daily(Cpack, Ipack)
-        elif x == "5":
-            coins_filepath = "Database/coinsdata.json"
-            current_coins = 0
-            if os.path.exists(coins_filepath):
-                with open(coins_filepath, "r") as f:
-                    content = f.read()
-                    if content.strip():
-                        current_coins = json.loads(content)["coins"]
-
-            p.upgrade_card(current_coins)
-        elif x == "6":
-            events.show_active_event()
-
-            if active_event and active_event["type"] == "limited shop":
+        try:
+            if x == '1':
                 print(
-                    f"{Fore.CYAN}Flash Sale is active! Visit the shop to see limited items!")
-                go_shop = input("Go to shop now? (y/n): ").strip().lower()
-                if go_shop == "y":
-                    shop.cts(p, events, active_event)
+                    "1. Card Pack\n"
+                    "2. Item Pack\n"
+                )
+                c = input("Choose a pack: ")
+                if c == '1':
+                    cards, pack_value = Cpack.open_pack()
+                    print("Nice! You opened a pack. Here's what you got:")
+                    time.sleep(2)
+                    for i, card in enumerate(cards):
+                        print(f"{i+1}. {card}")
+                    print(f"Total pack value: ${pack_value}")
+                    time.sleep(2)
+                    p.add_cards(cards)
+                    time.sleep(1)
+                    p.gain_exp(150)
+                    coins1 = events.apply_bonus_coins(200, active_event)
+                    p.add_coins(coins1)
+                    print()  # Blank Line
+                    input("Press ENTER to continue...")
+                elif c == '2':
+                    item = Ipack.open_Ipack()
+                    print("Nice! Here are the items you got:")
+                    time.sleep(1.5)
+                    item_counts = {}
+                    for x, items in enumerate(item):
+                        print(f"{x+1}. {items.Icard}")
+                    for card in item:
+                        name = card.Icard
+                        item_counts[name] = item_counts.get(name, 0) + 1
+                    print("You may use these items to upgrade your Pokemon © cards.")
+                    p.gain_exp(50)
+                    coins2 = events.apply_bonus_coins(100, active_event)
+                    p.add_coins(coins2)
+                    p.auto_addItems(item_counts)
+                    input("Press ENTER to continue playing...")
+            elif x == "2":
+                p.show_stats()
+                input("Press ENTER to continue...")
+            elif x == "3":
+                print(
+                    "1. View Card Collection\n"
+                    "2. View Item Inventory\n"
+                )
+                opt = input("Please pick an option: ")
+                if opt == '1':
+                    p.view_collection()
+                    input("Press ENTER to continue playing...")
+                elif opt == '2':
+                    p.view_items()
+                    input("Press ENTER to continue playing...")
+                else:
+                    pass
+            elif x == "4":
+                p.claim_daily(Cpack, Ipack)
+            elif x == "5":
+                coins_filepath = "Database/coinsdata.json"
+                current_coins = 0
+                if os.path.exists(coins_filepath):
+                    with open(coins_filepath, "r") as f:
+                        content = f.read()
+                        if content.strip():
+                            current_coins = json.loads(content)["coins"]
 
-            input("Press ENTER to continue...")
-        elif x == "7":
-            shop.cts(p, events, active_event)
-        elif x == "8":
-            print("Thank you for playing! See you again!")
+                p.upgrade_card(current_coins)
+            elif x == "6":
+                events.show_active_event()
+
+                if active_event and active_event["type"] == "limited shop":
+                    print(
+                        f"{Fore.CYAN}Flash Sale is active! Visit the shop to see limited items!")
+                    go_shop = input("Go to shop now? (y/n): ").strip().lower()
+                    if go_shop == "y":
+                        shop.cts(p, events, active_event)
+                    else:
+                        print(active_event["type"])
+
+                input("Press ENTER to continue...")
+            elif x == "7":
+                shop.cts(p, events, active_event)
+                input("Press ENTER to continue...")
+            elif x == "8":
+                p.trade_sell_cards()
+                time.sleep(2)
+                input("Press ENTER to continue...")
+            elif x == "9":
+                p.show_about()
+                time.sleep(2)
+                input("Press ENTER to continue...")
+            elif x == "10":
+                print("Thank you for playing! See you again!")
+                time.sleep(2)
+                sys.exit()
+        except Exception as e:
+            log_error(e, location=f"Menu option {x}")
+            input("Press ENTER to restart...")
             time.sleep(2)
-            sys.exit()
 
 
 if __name__ == '__main__':

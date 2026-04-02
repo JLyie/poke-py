@@ -6,39 +6,34 @@ The latest initial commits are still an unfinished program and is undergoing upd
 Do understand that this is just a beginner project, nothing too serious, but it might be serious if the game continues to receive updates.
 The sole purpose of this project/program being in GitHub is to learn more by receiving help from people who might see this and also learn stuff like using GitHub and Git. - dev
 
-The latest release is the version (v2.0.0-beta). The next official release will be v2.0.0 stable and will be published on March 31, 2026 | 3:00 PM PhST.
+> This is the Official Stable Release of PokePy v2.0.0! 🎉
 
-> ⚠️ This game is still in BETA. Expect bugs and frequent updates.
+# --- PokePy v2.0.0 Stable ---
 
-## How to run?
+## How to run? (For PC/Laptop)
 
 1. Go to [Releases](https://github.com/JLyie/poke-py/releases)
 2. Download the latest '.exe' file
 3. Double click it and then start playing!
 
---- poke-py v2.0.0 (BETA) ---
-
 ## Features
 
-- Card collection system
-- Item inventory
-- Shop with item trading
-- Chest with random loot drops
-- Card upgrade system with tier progression
-- Daily reward system
-- Special events (Coin Frenzy, Rare Drop Festival, Flash Sale)
-- Persistent save data (locally stored)
-- EXP and leveling system (Level 1-50)
+- About & Credits
+- Card Trade & Sell system
+- Anti-crash function
+- Error logging
 
----
+## Bug Fixes
 
-## Known Issues
+- Fixed the JSON saving for expdata.json
 
-- General tests still underway
-- Patching of bugs found after release
-- More content coming in future updates
+## Contact
 
----
+In case issue persists within the game (e.g bugs), please report it to me!
+
+> Gmail: lugasan.pydevelopments@gmail.com
+
+sending us pictures of the error that occured helps us make the update faster and release a new and patched version.
 
 ## License
 
