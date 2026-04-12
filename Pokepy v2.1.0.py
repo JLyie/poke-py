@@ -1,5 +1,6 @@
 
 
+import matplotlib.pyplot as plt
 import sys
 import os
 import time
@@ -9,6 +10,10 @@ from colorama import Fore, init, Back
 from datetime import datetime, timedelta
 import json
 import traceback
+import pygame
+import matplotlib
+matplotlib.use('Agg')  # use non-interactive backend
+
 
 if getattr(sys, 'frozen', False):
     # Running as exe
@@ -17,17 +22,20 @@ else:
     # Running as .py in VS Code
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 RARITY_TIERS = ["Common", "Uncommon", "Rare", "Legendary"]
+# "Rainbow" Quality can only be obtained from NPC Trades
 BORDER_TIERS = ["Non-Holo", "Foil", "Holo", "Rainbow"]
+# "Perfect" Quality can only be obtained from NPC Trades
 QUALITY_TIERS = ["Poor", "Good", "Excellent", "Perfect"]
 
 RARITY_WORTH = {"Common": 1, "Uncommon": 3, "Rare": 20, "Legendary": 100}
 BORDER_WORTH = {"Non-Holo": 1.5, "Foil": 2, "Holo": 3.5, "Rainbow": 8}
+# "Perfect" Quality can only be obtained from NPC Trades
 QUALITY_WORTH = {"Poor": 0.5, "Good": 1, "Excellent": 2.6, "Perfect": 4}
 
 UPGRADE_COSTS = {
     1: {"items": {"Upgrade Card": 1, "Magical Powder": 2}, "coins": 10},
     2: {"items": {"Upgrade Card": 1, "Fiery Leather": 2}, "coins": 25},
-    3: {"items": {"Upgrade Card": 2, "Void Crystal": 1, "Quantum Ball": 2}, "coins": 50}
+    3: {"items": {"Upgrade Card": 2, "Void Crystal": 1, "Quantum Ball": 2}, "coins": 100}
 }
 
 SPECIAL_EVENTS = [
@@ -136,6 +144,49 @@ class Pack:
             cards.append(card)
             pack_value += card.worth
         return cards, pack_value
+
+    def verify(self):
+        open_filepath = "Database/openpackdata.json"
+        exp_filepath = "Database/expdata.json"
+        exp_data = {"level": 1, "exp": 0}
+        os.makedirs("Database", exist_ok=True)
+
+        if os.path.exists(exp_filepath):
+            with open(exp_filepath, "r") as a:
+                content_exp = a.read()
+                if content_exp.strip():
+                    exp_data = json.loads(content_exp)
+
+        level_req = exp_data["level"] >= 10  # ✅ clean one liner
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        open_data = {"date": today, "opens_left": 10}
+
+        if os.path.exists(open_filepath):
+            with open(open_filepath, "r") as b:
+                content = b.read()
+                if content.strip():
+                    open_data = json.loads(content)
+                    if open_data["date"] != today and level_req:
+                        open_data = {"date": today, "opens_left": 10}
+
+        if not level_req:
+            time.sleep(2)
+            return True  # ✅ under level 10, unlimited opens
+
+        if open_data["opens_left"] <= 0:
+            print(
+                f"{Fore.RED}You've reached your daily pack open limit! Come back tomorrow.{Fore.RESET}")
+            return False
+
+        # Deduct one open and save
+        open_data["opens_left"] -= 1
+        with open(open_filepath, "w") as c:
+            json.dump(open_data, c, indent=4)
+
+        print(
+            f"{Fore.YELLOW}Pack opens remaining today: {open_data['opens_left']}/10{Fore.RESET}")
+        return True
 
 
 class ClassIcard:
@@ -272,7 +323,7 @@ class Player:
         self.save_progress()
 
     # UPDATED new check_level_up *upd-006.cd-220326
-    def check_level_up(self):
+    def check_level_up(self, sound_manager=None):
         while self.level < 50:
             level_up_exp = int(100 * (self.level ** 1.5))
             if self.exp >= level_up_exp:
@@ -280,6 +331,8 @@ class Player:
                 self.level += 1
                 print(
                     f"{Fore.GREEN}You just leveled up to Level {self.level}!{Fore.RESET}")
+                if sound_manager:
+                    sound_manager.play_sfx("level_up.mp3")
             else:
                 break
 
@@ -388,6 +441,9 @@ class Player:
 
     def upgrade_card(self, p_coins):
         filepath = "Database/carddata.json"
+        exp_filepath = "Database/expdata.json"
+        level_req = False
+        upd_type = 0  # 0 = Basic | 1 = Advanced
 
         if not os.path.exists(filepath):
             print("No card collection found.")
@@ -399,6 +455,39 @@ class Player:
                 print("Your card collection is empty.")
                 return
             cards = json.loads(content)
+
+        with open(exp_filepath, "r") as e:
+            exp_content = e.read()
+            exp = json.loads(exp_content)["level"]
+
+        if exp >= 10:
+            level_req = True
+
+        print("=== SELECT UPGRADE TYPE ===\n"
+              "1. Basic Upgrade\n"
+              "2. Advanced Upgrade\n"
+              )
+
+        inp = input("Select an Upgrade Type: ").strip()
+
+        if inp not in ("1", "2"):
+            print(
+                "Please enter a valid number and don't leave the space blank. Try again.")
+            time.sleep(2)
+            return
+
+        if inp == "2" and level_req:
+            upd_type = 1
+            print("Currently in Advanced mode.\n")
+            time.sleep(2)
+        elif inp == "2" and level_req is False:
+            print(
+                f"You are currently not eligible for this Upgrade Type. Your current level is {exp}. Only Lvl 10 and above are allowed.\n")
+            input("Press ENTER to continue...")
+            return
+        elif inp == "1":
+            print("Currently in Basic mode\n")
+            time.sleep(2)
 
         # Show collection
         print("\n=== SELECT A CARD TO UPGRADE ===")
@@ -439,6 +528,7 @@ class Player:
         upgrade_choice = input("Select upgrade type (0 to cancel): ").strip()
 
         if upgrade_choice == "0":
+            time.sleep(2)
             return
 
         upgrade_map = {
@@ -448,7 +538,8 @@ class Player:
         }
 
         if upgrade_choice not in upgrade_map:
-            print("Invalid choice.")
+            print(f"{Fore.RED}Invalid choice.{Fore.RESET}")
+            time.sleep(2)
             return
 
         card_key, tiers = upgrade_map[upgrade_choice]
@@ -477,12 +568,25 @@ class Player:
 
         if confirm != "y":
             print("Upgrade cancelled.")
+            time.sleep(2)
+            return
+
+        if next_tier == "Rainbow" or "Perfect" and level_req is False:
+            print(
+                f"You are not eligible for this upgrade. Your current level is {exp}. Requirement is Level 10 and above.")
+            time.sleep(2)
+            return
+        elif next_tier == "Rainbow" or "Perfect" and upd_type == 0:
+            print(
+                "You are currently in basic upgrading mode. Switch to Advanced and try again.")
+            time.sleep(2)
             return
 
         # Check coins
         if p_coins < cost_coins:
             print(
                 f"{Fore.RED}Not enough coins! You have {p_coins} but need {cost_coins}.{Fore.RESET}")
+            time.sleep(2)
             return
 
         # Check items
@@ -500,10 +604,13 @@ class Player:
                     if owned_item["quantity"] < required_qty:
                         print(
                             f"{Fore.RED}Not enough {required_item}! You have {owned_item['quantity']} but need {required_qty}.{Fore.RESET}")
+                        time.sleep(2)
                         return
+                    time.sleep(1)
                     break
             else:
                 print(f"{Fore.RED}You don't have any {required_item}!{Fore.RESET}")
+                time.sleep(2)
                 return
 
         # Deduct coins
@@ -537,6 +644,8 @@ class Player:
 
         print(f"\n{Fore.GREEN}Upgrade successful!{Fore.RESET}")
         print(f"{selected_card['name']} | Rarity: {selected_card['rarity']} | Border: {selected_card['border']} | Quality: {selected_card['image_quality']} | Worth: ${selected_card['worth']:.2f}")
+        time.sleep(2)
+        input("Press ENTER to continue...")
 
     def claim_daily(self, Cpack, Ipack):
         filepath = "Database/dailydata.json"
@@ -635,19 +744,21 @@ class Player:
     def show_about(self):
         print("\n=== ABOUT POKEPY ===")
         print("Game        : PokePy")
-        print("Version     : v2.0.0")
+        print("Version     : v2.1.0")
         print("Developer   : JL (PyDevelopments)")
-        print("Description : A terminal-based card collecting game.")
+        print("Description : A terminal-based card game.")
         print()
         print("=== VERSION HISTORY ===")
-        print("v1.8.0      : Initial commit")
-        print("v1.11.13    : Shop system added")
-        print("v1.12.0     : View collection and inventory")
-        print("v1.13.0     : Chest system added")
         print("v2.0.0-alpha: Card upgrade system, daily rewards")
         print("v2.0.0-beta : Special events, bug fixes, exe packaging")
         print("v2.0.0      : Stable release")
+        print("v2.1.0      : Sounds, Stats, Upgrades, Limits, Mass Inputs")
+        print(
+            "v2.2.0      : Release -> Apr 27, 2026 | 3:00 PM PhST (Estimate, might extend.)")
         print("====================\n")
+        time.sleep(2)
+        print("\n=== CREDITS ===")
+        print("Wait for v2.2.0!")
 
     def trade_sell_cards(self):
         filepath = "Database/carddata.json"
@@ -669,7 +780,7 @@ class Player:
 
         # Load trade data
         today = datetime.now().strftime("%Y-%m-%d")
-        trade_data = {"date": today, "trades_left": 2}
+        trade_data = {"date": today, "trades_left": 3}
         if os.path.exists(trade_filepath):
             with open(trade_filepath, "r") as f:
                 content = f.read()
@@ -677,12 +788,12 @@ class Player:
                     trade_data = json.loads(content)
                     # Reset if it's a new day
                     if trade_data["date"] != today:
-                        trade_data = {"date": today, "trades_left": 2}
+                        trade_data = {"date": today, "trades_left": 3}
 
         print("\n=== CARD TRADING & SELLING ===")
         print("1. Sell a card for coins")
         print(
-            f"2. Trade a card with BOT ({trade_data['trades_left']}/2 trades left today)")
+            f"2. Trade a card with BOT ({trade_data['trades_left']}/3 trades left today)")
         opt = input("Choose an option (0 to cancel): ").strip()
 
         if opt == "0":
@@ -697,40 +808,59 @@ class Player:
         print()
 
         if opt == "1":
-            # Sell a card
-            try:
-                choice = int(input("Select a card to sell (0 to cancel): "))
-                if choice == 0:
-                    return
-                if choice < 1 or choice > len(cards):
-                    print("Invalid choice.")
-                    time.sleep(2)
-                    return
-            except ValueError:
-                print("Please enter a valid number.")
+            print("Enter card number/s to sell separated by commas (e.g. 1,3,5 ): ")
+            raw = input("Select cards (0 to cancel): ")
+
+            if raw == "0":
+                print("Canceled")
                 time.sleep(2)
                 return
 
-            selected = cards[choice - 1]
-            sell_price = round(selected["worth"] * 0.75, 2)
+            # Parse input
+            try:
+                choices = [int(x.strip()) for x in raw.split(",")]
+            except ValueError:
+                print("Invalid Input. Use numbers separated by commas")
+                time.sleep(2)
+                return
 
-            print(f"\nSelected: {selected['name']}")
-            print(
-                f"Sell price: ${sell_price} (75% of ${selected['worth']:.2f})")
-            confirm = input("Confirm sell? (y/n): ").strip().lower()
+            # Validate Choices
+            invalid = [c for c in choices if c < 1 or c > len(cards)]
+            if invalid:
+                print(f"Invalid card numbers: {invalid}")
+                time.sleep(2)
+                return
 
-            if confirm != "y":
+            # Remove Duplicates
+            choice = list(set(choices))
+
+            # Show selected cards and total sell price
+            selected_cards = [cards[c - 1] for c in choices]
+            total_sell = round(
+                sum(card["worth"] * 0.75 for card in selected_cards), 2)
+
+            print(f"\nSelected Cards:")
+            for card in selected_cards:
+                sell_price = round(card["worth"] * 0.75, 2)
+                print(f" - {card['name']} -> ${sell_price}")
+            print(f"Total sell price: ${total_sell}")
+
+            conf = input("Confirm sell? (y/n): ").strip().lower()
+            if conf != "y":
                 print("Sell cancelled.")
                 time.sleep(2)
                 return
 
-            cards.pop(choice - 1)
+            # Remove sold cards (remove in reverse order to avoid index shifting)
+            for i in sorted([c - 1 for c in choices], reverse=True):
+                cards.pop(i)
+
             with open(filepath, "w") as f:
                 json.dump(cards, f, indent=4)
 
-            self.add_coins(int(sell_price))
+            self.add_coins(int(total_sell))
             print(
-                f"{Fore.GREEN}Successfully sold {selected['name']} for ${sell_price}!{Fore.RESET}")
+                f"{Fore.GREEN}Successfully sold {len(choices)} card(s) for ${total_sell}!{Fore.RESET}")
 
         elif opt == "2":
             # Check trades left
@@ -816,7 +946,7 @@ class Player:
             print(
                 f"{Fore.GREEN}Successfully traded {your_card['name']} for {npc_card['name']}!{Fore.RESET}")
             print(
-                f"{Fore.YELLOW}{trade_data['trades_left']}/2 trades remaining today.{Fore.RESET}")
+                f"{Fore.YELLOW}{trade_data['trades_left']}/3 trades remaining today.{Fore.RESET}")
 
         else:
             print("Invalid option.")
@@ -827,6 +957,135 @@ class Player:
         print(f"Your startup time is: {startup}")
         time.sleep(1)
         pass
+
+    def show_card_stats(self):
+        filepath = "Database/carddata.json"
+
+        if not os.path.exists(filepath):
+            print("No card collection found.")
+            time.sleep(2)
+            return
+
+        with open(filepath, "r") as f:
+            content = f.read()
+        if not content.strip():
+            print("Your card collection is empty.")
+            time.sleep(2)
+            return
+        cards = json.loads(content)
+
+        if not cards:
+            print("Your card collection is empty.")
+            time.sleep(2)
+            return
+
+        # Count breakdowns
+        rarity_count = {}
+        border_count = {}
+        quality_count = {}
+        total_worth = 0
+        most_valuable = cards[0]
+        rarest_card = cards[0]
+        rarity_order = ["Common", "Uncommon", "Rare", "Legendary"]
+
+        for card in cards:
+            r = card["rarity"]
+            rarity_count[r] = rarity_count.get(r, 0) + 1
+
+            b = card["border"]
+            border_count[b] = border_count.get(b, 0) + 1
+
+            q = card["image_quality"]
+            quality_count[q] = quality_count.get(q, 0) + 1
+
+            total_worth += card["worth"]
+
+            if card["worth"] > most_valuable["worth"]:
+                most_valuable = card
+
+            if rarity_order.index(card["rarity"]) > rarity_order.index(rarest_card["rarity"]):
+                rarest_card = card
+
+        # Print terminal stats
+        print("\n=== CARD COLLECTION STATISTICS ===")
+        print(f"Total Cards      : {len(cards)}")
+        print(f"Total Worth      : ${total_worth:.2f}")
+        print(
+            f"\nMost Valuable    : {most_valuable['name']} (${most_valuable['worth']:.2f})")
+        print(
+            f"Rarest Card      : {rarest_card['name']} ({rarest_card['rarity']})")
+
+        print(f"\n--- Rarity Breakdown ---")
+        for rarity in rarity_order:
+            count = rarity_count.get(rarity, 0)
+            pct = (count / len(cards)) * 100
+            bar = "█" * int(pct / 5)
+            print(f"{rarity:<12}: {bar:<20} {count} ({pct:.1f}%)")
+
+        print(f"\n--- Border Breakdown ---")
+        border_order = ["Non-Holo", "Foil", "Holo", "Rainbow"]
+        for border in border_order:
+            count = border_count.get(border, 0)
+            pct = (count / len(cards)) * 100
+            bar = "█" * int(pct / 5)
+            print(f"{border:<12}: {bar:<20} {count} ({pct:.1f}%)")
+
+        print(f"\n--- Quality Breakdown ---")
+        quality_order = ["Poor", "Good", "Excellent", "Perfect"]
+        for quality in quality_order:
+            count = quality_count.get(quality, 0)
+            pct = (count / len(cards)) * 100
+            bar = "█" * int(pct / 5)
+            print(f"{quality:<12}: {bar:<20} {count} ({pct:.1f}%)")
+
+        print("===================================\n")
+
+        # Ask to show graph
+        show_graph = input("Show visual graph? (y/n): ").strip().lower()
+        if show_graph != "y":
+            print("Returning...")
+            time.sleep(2)
+            return
+
+        # Generate graph
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        fig.suptitle("Card Collection Statistics",
+                     fontsize=16, fontweight="bold")
+
+        # Rarity pie chart
+        rarity_labels = [k for k in rarity_order if k in rarity_count]
+        rarity_values = [rarity_count[k] for k in rarity_labels]
+        rarity_colors = ["#a8d8a8", "#7ec8e3", "#c8a8e8", "#f4c875"]
+        axes[0].pie(rarity_values, labels=rarity_labels,
+                    colors=rarity_colors, autopct="%1.1f%%", startangle=90)
+        axes[0].set_title("Rarity Breakdown")
+
+        # Border bar chart
+        border_labels = [b for b in border_order if b in border_count]
+        border_values = [border_count[b] for b in border_labels]
+        border_colors = ["#d3d3d3", "#c8e6c9", "#b3d9f5", "#f4c875"]
+        axes[1].bar(border_labels, border_values,
+                    color=border_colors[:len(border_labels)])
+        axes[1].set_title("Border Breakdown")
+        axes[1].set_ylabel("Count")
+
+        # Quality bar chart
+        quality_labels = [q for q in quality_order if q in quality_count]
+        quality_values = [quality_count[q] for q in quality_labels]
+        quality_colors = ["#ef9a9a", "#ffcc80", "#a5d6a7", "#80cbc4"]
+        axes[2].bar(quality_labels, quality_values,
+                    color=quality_colors[:len(quality_labels)])
+        axes[2].set_title("Quality Breakdown")
+        axes[2].set_ylabel("Count")
+
+        plt.tight_layout()
+        plt.savefig("Database/card_stats.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print(f"{Fore.GREEN}Graph saved! Opening...{Fore.RESET}")
+
+        # Open the image automatically
+        import subprocess
+        subprocess.Popen(["start", "Database/card_stats.png"], shell=True)
 
 
 class Shop:
@@ -854,11 +1113,13 @@ class Shop:
                     if owned_item["quantity"] < required_qty:
                         print(
                             f"{Fore.RED}Not enough {required_item}! You have {owned_item['quantity']} but need {required_qty}.{Fore.RESET}")
+                        time.sleep(2)
                         return False
                     break
             else:
                 # Item not found in inventory at all
                 print(f"{Fore.RED}You don't have any {required_item}!{Fore.RESET}")
+                time.sleep(2)
                 return False
 
         print(f"{Fore.GREEN}Purchase verified! You can buy {buy}.{Fore.RESET}")
@@ -868,15 +1129,15 @@ class Shop:
     def cts(self, p, events, active_event):
         print("Welcome to the Shop, player!\n")
         print("CURRENT STOCKS")
-        print(f"1. Astral Wand        - 5 Magical Powder, 2 Fiery Leather")
-        print(f"2. Upgrade Card       - 2 Quantum Ball")
-        print(f"3. Chest              - 3 Magical Powder")
+        print(f"1. Obsidian Shard     - 20 Magical Powder, 10 Fiery Leather, and 2 Void Crystal")
+        print(f"2. Upgrade Card       - 1 Quantum Ball, 10 Magical Powder")
+        print(f"3. Chest              - 3 Magical Powder, 5 Fiery Leather")
         print(f"4. Celestial Wand     - {self.randchoice}")
         print()
 
         if self.randchoice == "ON STOCK":
             print(
-                f"Celestial Wand costs: 3 Fiery Leather, 5 Magical Powder, 1 Quantum Ball\n")
+                f"Celestial Wand costs: 5 Fiery Leather, 5 Magical Powder, 4 Quantum Ball, 1 Astral Wand and 1 Obsidian Shard.\n")
 
         # Show limited items if Flash Sale is active
         limited = events.get_limited_shop_items(active_event)
@@ -890,10 +1151,10 @@ class Shop:
 
         # Define shop items
         shop_items = {
-            "1": {"name": "Astral Wand", "cost": {"Magical Powder": 5, "Fiery Leather": 2}},
-            "2": {"name": "Upgrade Card", "cost": {"Quantum Ball": 2}},
-            "3": {"name": "Chest", "cost": {"Magical Powder": 3}},
-            "4": {"name": "Celestial Wand", "cost": {"Fiery Leather": 3, "Magical Powder": 5, "Quantum Ball": 1}}
+            "1": {"name": "Obsidian Shard", "cost": {"Magical Powder": 20, "Fiery Leather": 10, "Void Crystal": 2}},
+            "2": {"name": "Upgrade Card", "cost": {"Quantum Ball": 1, "Magical Powder": 10}},
+            "3": {"name": "Chest", "cost": {"Magical Powder": 3, "Fiery Leather": 5}},
+            "4": {"name": "Celestial Wand", "cost": {"Fiery Leather": 5, "Magical Powder": 5, "Quantum Ball": 4, "Obsidian Shard": 1, "Astral Wand": 1}}
         }
 
         inp = input("Please select an item to trade: ")
@@ -910,20 +1171,40 @@ class Shop:
                                      qty in limited_details["cost"].items())
                 print(f"\nYou selected: {limited_name}")
                 print(f"Cost: {cost_str}")
-                confirm = input("Confirm trade? (y/n): ").strip().lower()
+
+                try:
+                    qty = int(
+                        input("How many do you want to buy? (1-10): ").strip())
+                    if qty < 1 or qty > 10:
+                        print("Invalid Quantity.")
+                        time.sleep(2)
+                        return
+                except ValueError:
+                    print("Invalid quantity.")
+                    time.sleep(2)
+                    return
+
+                total_cost = {item: amount * qty for item,
+                              amount in limited_details["cost"].items()}
+                total_cost_str = ", ".join(
+                    f"{amount} {item}" for item, amount in total_cost.items())
+                print(f"Total cost for {qty}x: {total_cost_str}")
+                confirm = input("Confirm buy? (y/n): ").strip().lower()
 
                 if confirm != "y":
                     print("Trade cancelled.")
                     time.sleep(2)
                     return
 
-                if not self.verify(limited_name, limited_details["cost"]):
+                if not self.verify(limited_name, total_cost):
+                    time.sleep(2)
                     return
 
-                self.deduct_items(limited_details["cost"])
-                p.auto_addItems(limited_details["reward"])
-                print(
-                    f"{Fore.GREEN}You successfully traded for {limited_name}!{Fore.RESET}")
+                self.deduct_items(total_cost)
+                for _ in range(qty):
+                    p.auto_addItems(limited_details["reward"])
+                    print(
+                        f"{Fore.GREEN}You successfully bought {qty}x {limited_name}!{Fore.RESET}")
                 time.sleep(3)
                 return
 
@@ -943,26 +1224,46 @@ class Shop:
         name = selected["name"]
         cost = selected["cost"]
 
-        cost_str = ", ".join(f"{qty} {item}" for item, qty in cost.items())
-        print(f"\nYou selected: {name}")
-        print(f"Cost: {cost_str}")
-        confirm = input("Confirm trade? (y/n): ").strip().lower()
+        # Ask quantity
+        try:
+            qty = int(input(f"How many {name} do you want? (1-10): ").strip())
+            if qty < 1 or qty > 10:
+                print("Invalid quantity.")
+                time.sleep(2)
+                return
+        except ValueError:
+            print("Invalid quantity.")
+            time.sleep(2)
+            return
+
+        # Multiply cost by quantity
+        total_cost = {item: amount * qty for item, amount in cost.items()}
+        cost_str = ", ".join(f"{amount} {item}" for item,
+                             amount in total_cost.items())
+        print(f"\nYou Selected: {qty}x {name}")
+        print(f"Total cost: {cost_str}")
+        confirm = input("Confirm buy? (y/n): ").strip().lower()
 
         if confirm != "y":
             print("Trade cancelled.")
+            time.sleep(2)
             return
 
         if not self.verify(name, cost):
+            time.sleep(2)
             return
 
         if inp == "3":
-            self.deduct_items(cost)
-            self.open_chest(p, active_event)
-            return
+            self.deduct_items(total_cost)
+            for _ in range(qty):
+                self.open_chest(p, active_event)
+                time.sleep(1)
+                return
 
-        self.deduct_items(cost)
-        p.auto_addItems({name: 1})
-        print(f"{Fore.GREEN}You successfully traded for {name}!{Fore.RESET}")
+        self.deduct_items(total_cost)
+        for _ in range(qty):
+            p.auto_addItems({name: 1})
+            print(f"{Fore.GREEN}You successfully bought {qty}x {name}!{Fore.RESET}")
 
     def deduct_items(self, cost):
         filepath = "Database/itemdata.json"
@@ -996,7 +1297,7 @@ class Shop:
             {"name": "Magical Powder", "weight": 40},
             {"name": "Fiery Leather", "weight": 30},
             {"name": "Quantum Ball", "weight": 20},
-            {"name": "Void Crystal", "weight": 10},  # rare exclusive
+            {"name": "Void Crystal", "weight": 7},  # rare exclusive
         ]
 
         names = [item["name"] for item in loot_pool]
@@ -1152,6 +1453,103 @@ class SpecialEvents:
         return {}
 
 
+class SoundManager:
+    def __init__(self):
+        self.enabled = True
+        self.settings_filepath = "Database/settings.json"
+        os.makedirs("Database", exist_ok=True)
+        pygame.mixer.init()
+        self.load_settings()
+
+    def load_settings(self):
+        if not os.path.exists(self.settings_filepath):
+            self._save_settings()
+            return
+        with open(self.settings_filepath, "r") as f:
+            content = f.read()
+            if content.strip():
+                data = json.loads(content)
+                self.enabled = data.get("sound_enabled", True)
+
+    def _save_settings(self):
+        with open(self.settings_filepath, "w") as f:
+            json.dump({"sound_enabled": self.enabled}, f, indent=4)
+
+    def toggle_sound(self):
+        self.enabled = not self.enabled
+        self._save_settings()
+        status = "ON" if self.enabled else "OFF"
+        print(f"{Fore.CYAN}Sound turned {status}!{Fore.RESET}")
+        time.sleep(1)
+
+    def play_bgm(self):
+        if not self.enabled:
+            return
+        try:
+            pygame.mixer.music.load("Sounds/bgm.mp3")
+            pygame.mixer.music.set_volume(0.4)
+            pygame.mixer.music.play(-1)  # -1 loops forever
+        except Exception:
+            pass  # silently fail if file missing
+
+    def stop_bgm(self):
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    def play_sfx(self, sound_file):
+        if not self.enabled:
+            return
+        try:
+            sound = pygame.mixer.Sound(f"Sounds/{sound_file}")
+            sound.set_volume(0.7)
+            sound.play()
+        except Exception:
+            pass  # silently fail if file missing
+
+
+class Settings:
+    def show(self, sound_manager):
+        while True:
+            print("\n=== SETTINGS ===")
+            sound_status = "ON" if sound_manager.enabled else "OFF"
+            print(f"1. Sound         [{sound_status}]")
+            print(f"2. Display")        # future
+            print(f"3. Gameplay")       # future
+            print(f"4. Account")        # future
+            print(f"5. Back")
+            print("================\n")
+
+            opt = input("Choose an option: ").strip()
+
+            if opt == "1":
+                self.sound_settings(sound_manager)
+            elif opt == "5":
+                return
+            else:
+                print("Coming soon!")
+                time.sleep(1)
+
+    def sound_settings(self, sound_manager):
+        while True:
+            print("\n=== SOUND SETTINGS ===")
+            sound_status = "ON" if sound_manager.enabled else "OFF"
+            print(f"1. Toggle Sound  [{sound_status}]")
+            print(f"2. Back")
+            print("======================\n")
+
+            opt = input("Choose an option: ").strip()
+
+            if opt == "1":
+                sound_manager.toggle_sound()
+            elif opt == "2":
+                return
+            else:
+                print("Invalid option.")
+                time.sleep(1)
+
+
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -1179,13 +1577,15 @@ def main():
     Ipack = ItemPack()
     shop = Shop()
     events = SpecialEvents()
+    sound_manager = SoundManager()
+    settings = Settings()
     active_event = events.check_event()
     p.load_progress()
     p.startup()
+    sound_manager.play_bgm()
     while True:
         clear_screen()
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.0.0")
-        print("The official stable release of v2.0.0 ! \n", file=sys.stderr)
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.1.0")
         time.sleep(2)
         print(
             "1. Open a pack\n"
@@ -1195,12 +1595,14 @@ def main():
             "5. Modify Cards\n"
             "6. Special Events\n"
             "7. Shop\n"
-            "8. Card Trade & Selling (NEW!)\n"
-            "9. About & Credits (NEW!)\n"
-            "10. Exit"
+            "8. Card Trade & Selling\n"
+            "9. Card Statistics (NEW!)\n"
+            "10. About & Credits\n"
+            "11. Settings (NEW!)\n"
+            "12. Exit"
         )
-        x = input("Choose an option: ")
         try:
+            x = input("Choose an option: ")
             if x == '1':
                 print(
                     "1. Card Pack\n"
@@ -1208,6 +1610,8 @@ def main():
                 )
                 c = input("Choose a pack: ")
                 if c == '1':
+                    sound_manager.play_sfx("pack_open.mp3")
+                    Cpack.verify()
                     cards, pack_value = Cpack.open_pack()
                     print("Nice! You opened a pack. Here's what you got:")
                     time.sleep(2)
@@ -1224,6 +1628,7 @@ def main():
                     input("Press ENTER to continue...")
                 elif c == '2':
                     item = Ipack.open_Ipack()
+                    sound_manager.play_sfx("pack_open.mp3")
                     print("Nice! Here are the items you got:")
                     time.sleep(1.5)
                     item_counts = {}
@@ -1288,14 +1693,20 @@ def main():
                 time.sleep(2)
                 input("Press ENTER to continue...")
             elif x == "9":
+                p.show_card_stats()
+                input("Press ENTER to continue...")
+            elif x == "10":
                 p.show_about()
                 time.sleep(2)
                 input("Press ENTER to continue...")
-            elif x == "10":
+            elif x == "11":
+                settings.show(sound_manager)
+            elif x == "12":
                 print("Thank you for playing! See you again!")
+                sound_manager.stop_bgm()
                 time.sleep(2)
                 sys.exit()
-        except Exception as e:
+        except (Exception, KeyboardInterrupt) as e:
             log_error(e, location=f"Menu option {x}")
             input("Press ENTER to restart...")
             time.sleep(2)

@@ -2,13 +2,10 @@
 
 Pokepy by PyDevelopments (ran and maintained by one person only) is a terminal-based game (runs only in CLI's / TUI's) and is mainly just a card collection/trading game.
 Most of the codes / functions on initial commits are from AI - essentialy making this project a result of vibe coding, but of course, the idea came from me, the developer (JL).
-The latest initial commits are still an unfinished program and is undergoing updates almost every day. The next official release will be v2.0.0, a reasonable version to officially release the game. The game is also receiving updates to avoid copyright.
 Do understand that this is just a beginner project, nothing too serious, but it might be serious if the game continues to receive updates.
 The sole purpose of this project/program being in GitHub is to learn more by receiving help from people who might see this and also learn stuff like using GitHub and Git. - dev
 
-> This is the Official Stable Release of PokePy v2.0.0! 🎉
-
-# --- PokePy v2.0.0 Stable ---
+# --- PokePy v2.1.0 ---
 
 ## How to run? (For PC/Laptop)
 
@@ -16,19 +13,9 @@ The sole purpose of this project/program being in GitHub is to learn more by rec
 2. Download the latest '.exe' file
 3. Double click it and then start playing!
 
-## Features
+# Game Info
 
-- About & Credits
-- Card Trade & Sell
-- Anti-crash function
-- Error logging
-
-## Bug Fixes
-
-- Fixed the JSON saving for expdata.json
-- Fixed constants & variables to match with other constants/variables
-- Fixed texts
-- Minor UI changes
+For more game info, head to [Releases](https://github.com/JLyie/poke-py/releases) and check out the release notes.
 
 ## Contact
 
