@@ -49,7 +49,7 @@ SPECIAL_EVENTS = [
         "name": "Rare Drop Festival",
         "type": "rare_items",
         "description": "Rare items drop more frequently from chests!",
-        "bonus_items": {"Void Crystal": 1, "Quantum Ball": 2}
+        "bonus_items": {"Void Crystal": 1, "Upgrade Card": 1}
     },
     {
         "name": "Flash Sale",
