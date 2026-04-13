@@ -56,8 +56,8 @@ SPECIAL_EVENTS = [
         "type": "limited_shop",
         "description": "Special limited items available in the shop!",
         "limited_items": {
-            "Mystery Box": {"cost": {"Magical Powder": 3}, "reward": {"Void Crystal": 1, "Celestial Wand": 1}},
-            "Booster Bundle": {"cost": {"Fiery Leather": 2}, "reward": {"Quantum Ball": 3, "Magical Powder": 5}}
+            "Mystery Box": {"cost": {"Magical Powder": 25, "Fiery Leather": 10, "Quantum Ball": 10}, "reward": {"Void Crystal": 1, "Celestial Wand": 1}},
+            "Booster Bundle": {"cost": {"Fiery Leather": 10, "Magical Powder": 10}, "reward": {"Quantum Ball": 3, "Magical Powder": 5}}
         }
     }
 ]
@@ -758,7 +758,7 @@ class Player:
         print("====================\n")
         time.sleep(2)
         print("\n=== CREDITS ===")
-        print("Wait for v2.2.0!")
+        # WORK
 
     def trade_sell_cards(self):
         filepath = "Database/carddata.json"
@@ -1585,7 +1585,7 @@ def main():
     sound_manager.play_bgm()
     while True:
         clear_screen()
-        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.1.0")
+        print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.2.0")
         time.sleep(2)
         print(
             "1. Open a pack\n"
