@@ -5,12 +5,12 @@ Most of the codes / functions on initial commits are from AI - essentialy making
 Do understand that this is just a beginner project, nothing too serious, but it might be serious if the game continues to receive updates.
 The sole purpose of this project/program being in GitHub is to learn more by receiving help from people who might see this and also learn stuff like using GitHub and Git. - dev
 
-# --- PokePy v2.1.0 ---
+# --- PokePy v2.2.0 ---
 
 ## How to run? (For PC/Laptop) (You can also find the instruction in the latest release notes.)
 
 1. Go to [Releases](https://github.com/JLyie/poke-py/releases)
-2. Go to the PyDevelopments Google Drive via the link in the latest version release notes.
+2. Go to the PyDevelopments Google Drive via the link in the latest release notes.
 3. Download both the .exe and sounds.zip files.
 4. Extract sounds.zip file to get the Sounds folder.
 5. Make sure the Sounds folder is next to the .exe file.
