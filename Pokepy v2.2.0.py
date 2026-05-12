@@ -18,6 +18,7 @@ import stat
 import sqlite3
 import secrets
 import string
+import bcg  # for v2.3
 matplotlib.use('Agg')  # use non-interactive backend
 
 
@@ -27,6 +28,11 @@ if getattr(sys, 'frozen', False):
 else:
     # Running as .py in VS Code
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+CREATURE_CARDS = ['Pykagloo', 'Fireguard', 'Balbuzer',
+                  'Spookie', 'Bloomey', "Arcdog", "Bunbun", "Tovolt"]  # Creature Cards
+
+MISC_CARDS = []
 
 PLAYER_TITLES = {
     1:  "Novice Collector",
@@ -41,8 +47,6 @@ PLAYER_TITLES = {
     45: "Rainbow Chaser",
     50: "Ultimate Collector"
 }
-
-ATTRIBUTES = []  # TODO #2: ATTRIBUTES FOR CARDS
 
 RARITY_TIERS = ["Common", "Uncommon", "Rare", "Legendary"]
 # "Rainbow" Quality can only be obtained from NPC Trades
@@ -140,7 +144,7 @@ class Pack:
         image_quality = random.choice(self.image_qualities)
         worth = self.calculate_worth(rarity, border, image_quality)
         # Changed names
-        name = f"{rarity} {random.choice(['Pikagloo', 'Fireguard', 'Balbuzer', 'Spookie', 'Bloomey'])}"
+        name = f"{rarity} {random.choice(CREATURE_CARDS)}"
         return Card(name, rarity, border, image_quality, worth)
 
     def calculate_worth(self, rarity, border, image_quality):
@@ -176,30 +180,29 @@ class Pack:
             pack_value += card.worth
         return cards, pack_value
 
-    def verify(self):
+    def verify(self, save_manager):
         open_filepath = "Database/openpackdata.json"
         exp_filepath = "Database/expdata.json"
-        exp_data = {"level": 1, "exp": 0}
+        default_exp_data = {"level": 1, "exp": 0}
         os.makedirs("Database", exist_ok=True)
 
         if os.path.exists(exp_filepath):
-            with open(exp_filepath, "r") as a:
-                content_exp = a.read()
-                if content_exp.strip():
-                    exp_data = json.loads(content_exp)
+            exp_data, status = save_manager.load(
+                exp_filepath, default_exp_data)
+            save_manager.handle_status(status, exp_filepath, default_exp_data)
 
         level_req = exp_data["level"] >= 10  # ✅ clean one liner
 
         today = datetime.now().strftime("%Y-%m-%d")
-        open_data = {"date": today, "opens_left": 10}
+        default_open_data = {"date": today, "opens_left": 10}
 
         if os.path.exists(open_filepath):
-            with open(open_filepath, "r") as b:
-                content = b.read()
-                if content.strip():
-                    open_data = json.loads(content)
-                    if open_data["date"] != today and level_req:
-                        open_data = {"date": today, "opens_left": 10}
+            open_data, status = save_manager.load(
+                open_filepath, default_open_data)
+            save_manager.handle_status(
+                status, open_filepath, default_open_data)
+            if open_data["date"] != today and level_req:
+                open_data = {"date": today, "opens_left": 10}
 
         if not level_req:
             time.sleep(2)
@@ -212,8 +215,7 @@ class Pack:
 
         # Deduct one open and save
         open_data["opens_left"] -= 1
-        with open(open_filepath, "w") as c:
-            json.dump(open_data, c, indent=4)
+        save_manager.save(open_filepath, open_data)
 
         print(
             f"{Fore.YELLOW}Pack opens remaining today: {open_data['opens_left']}/10{Fore.RESET}")
@@ -653,7 +655,7 @@ class Player:
         time.sleep(2)
         input("Press ENTER to continue...")
 
-    def claim_daily(self, Cpack, Ipack):
+    def claim_daily(self, Cpack, save_manager):
         filepath = "Database/dailydata.json"
         os.makedirs("Database", exist_ok=True)
 
@@ -717,13 +719,13 @@ class Player:
         print(f"{Fore.CYAN}You got a {tier['name']} reward!{Fore.RESET}\n")
 
         # Give coins
-        self.add_coins(tier["coins"])
+        self.add_coins(tier["coins"], save_manager)
 
         # Give EXP
-        self.gain_exp(tier["exp"])
+        self.gain_exp(tier["exp"], save_manager)
 
         # Give items
-        self.auto_addItems(tier["items"])
+        self.auto_addItems(tier["items"], self.save_manager)
         for item_name, qty in tier["items"].items():
             print(f"{Fore.GREEN}+{qty} {item_name}{Fore.RESET}")
 
@@ -734,7 +736,7 @@ class Player:
             for _ in range(tier["cards"]):
                 time.sleep(1)
                 cards, x = Cpack.open_pack()
-                self.add_cards(cards)
+                self.add_cards(cards, save_manager)
                 for card in cards:
                     print(f"{Fore.GREEN}+{card.name} ({card.rarity}){Fore.RESET}")
 
@@ -2296,7 +2298,7 @@ def main():
     while True:
         clear_screen()
         print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.2.0")
-        time.sleep(2)
+        time.sleep(0.5)
         print(
             "1. Open a pack\n"
             "2. Player Stats\n"
@@ -2308,7 +2310,7 @@ def main():
             "8. Card Trade & Selling\n"
             "9. Card Statistics\n"
             "10. About & Credits\n"
-            "11. Settings\n"
+            "11. Settings (NEW OPTION!)\n"
             "12. Exit"
         )
         try:
@@ -2321,7 +2323,7 @@ def main():
                 c = input("Choose a pack: ")
                 if c == '1':
                     sound_manager.play_sfx("pack_open.mp3")
-                    Cpack.verify()
+                    Cpack.verify(save_manager)
                     cards, pack_value = Cpack.open_pack()
                     print("Nice! You opened a pack. Here's what you got:")
                     time.sleep(2)
@@ -2371,7 +2373,7 @@ def main():
                 else:
                     pass
             elif x == "4":
-                p.claim_daily(Cpack, Ipack)
+                p.claim_daily(Cpack, save_manager)
             elif x == "5":
                 coins_filepath = "Database/coinsdata.json"
                 current_coins = 0
