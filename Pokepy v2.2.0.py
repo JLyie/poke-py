@@ -766,7 +766,13 @@ class Player:
         print("====================\n")
         time.sleep(2)
         print("\n=== CREDITS ===")
-        # WORK
+        print("BGM -> oceanking (Pixabay)")
+        print("Card Sounds -> freesound_community (Pixabay)")
+        print("Level Up Sound -> Sunovia (Pixabay)")
+        print("Menu Nav. Sound -> SoundReality (Pixabay)")
+        print("===============================")
+        print("For any concerns/inquiries regarding credits, please email here: lugasan.pydevelopments@gmail.com")
+        print("===============================")
 
     def trade_sell_cards(self):
         filepath = "Database/carddata.json"

@@ -3,11 +3,14 @@ This module is made for CardPy versions 2.3 and above. It is a battle card game 
 battle cards that you collect/trade and fight until you win. Work In Progress -May 11, 2026 PhST-
 '''
 
-CARD_STATS = {  # TODO #1: Finalize creature attributes and substitute placeholders.
-    "Pykagloo": {"hp": ..., "atk": ..., "def": ...},
-    "Fireguard": {"hp": ..., "atk": ..., "def": ...},
-    "Spookie": {"hp": ..., "atk": ..., "def": ...},
-    "Bloomey": {"hp": ..., "atk": ..., "def": ...}
+CARD_STATS = {  # TODO #1 | v2.3: Finalize creature attributes and substitute placeholders.
+    "Pykagloo": {"hp": ..., "atk": ..., "def": ..., "type": ...},
+    "Fireguard": {"hp": ..., "atk": ..., "def": ..., "type": ...},
+    "Spookie": {"hp": ..., "atk": ..., "def": ..., "type": ...},
+    "Bloomey": {"hp": ..., "atk": ..., "def": ..., "type": ...},
+    "Arcdog": {"hp": ..., "atk": ..., "def": ..., "type": ...},
+    "Bunbun": {"hp": ..., "atk": ..., "def": ..., "type": ...},
+    "Tovolt": {"hp": ..., "atk": ..., "def": ..., "type": ...},
 }
 
 
