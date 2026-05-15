@@ -1,5 +1,3 @@
-
-
 import matplotlib.pyplot as plt
 import sys
 import os
@@ -184,29 +182,54 @@ class Pack:
         open_filepath = "Database/openpackdata.json"
         exp_filepath = "Database/expdata.json"
         default_exp_data = {"level": 1, "exp": 0}
+        default_coins_data = {"coins": 0}
         os.makedirs("Database", exist_ok=True)
 
-        if os.path.exists(exp_filepath):
-            exp_data, status = save_manager.load(
-                exp_filepath, default_exp_data)
-            save_manager.handle_status(status, exp_filepath, default_exp_data)
+        exp_data, status = save_manager.load(exp_filepath, default_exp_data)
+        save_manager.handle_status(status, exp_filepath, default_exp_data)
 
-        level_req = exp_data["level"] >= 10  # ✅ clean one liner
+        # For Lvl 10 checks, for pack quantity limiter
+        level_req1 = exp_data["level"] >= 10
+        # For Lvl 5 checks, for coins to buy packs for players past Lvl 5
+        level_req2 = exp_data['level'] >= 5
 
         today = datetime.now().strftime("%Y-%m-%d")
         default_open_data = {"date": today, "opens_left": 10}
 
-        if os.path.exists(open_filepath):
-            open_data, status = save_manager.load(
-                open_filepath, default_open_data)
+        # Coin Check (Level 5+ Players)
+        if level_req2:
+            coins_data, status = save_manager.load(
+                "Database/coinsdata.json", default_coins_data)
             save_manager.handle_status(
-                status, open_filepath, default_open_data)
-            if open_data["date"] != today and level_req:
-                open_data = {"date": today, "opens_left": 10}
+                status, "Database/coinsdata.json", default_coins_data)
 
-        if not level_req:
+            pack_cost = 100
+
+            if coins_data["coins"] < pack_cost:
+                print(
+                    f"{Fore.RED}You need {pack_cost} coins to open a pack! You have {coins_data["coins"]}{Fore.RESET}")
+                time.sleep(2)
+                return False
+
+            # Deduct coins
+            coins_data["coins"] -= pack_cost
+            save_manager.save("Database/coinsdata.json", coins_data)
+            print(
+                f"{Fore.YELLOW}-{pack_cost} coins! Remaining: {coins_data['coins']}{Fore.RESET}")
+
+        # Pack Limiter (Level 10+)
+        if not level_req1:
             time.sleep(2)
             return True  # ✅ under level 10, unlimited opens
+
+        today = datetime.now().strftime("%Y-%m-$d")
+        default_open_data = {"date": today, "opens_left": 10}
+
+        open_data, status = save_manager.load(open_filepath, default_open_data)
+        save_manager.handle_status(status, open_filepath, default_open_data)
+
+        if open_data["date"] != today:
+            open_data = {"date": today, "opens_left": 10}
 
         if open_data["opens_left"] <= 0:
             print(
@@ -340,7 +363,6 @@ class Player:
             print(f"{i}. {item['item_name']} x{item['quantity']}")
         print("===========================\n")
 
-    # UPDATED fixed gain_exp *upd-007.cd-220326
     def gain_exp(self, amount, save_manager):
         if self.level >= 50:
             print(f"{Fore.RED}You're at max level!{Fore.RESET}")
@@ -350,7 +372,6 @@ class Player:
         self.check_level_up()
         self.save_progress(save_manager)
 
-    # UPDATED new check_level_up *upd-006.cd-220326
     def check_level_up(self, sound_manager=None):
         while self.level < 50:
             level_up_exp = int(100 * (self.level ** 1.5))
@@ -364,13 +385,11 @@ class Player:
             else:
                 break
 
-    # UPDATED new save_progress *upd-008.cd-220326
     def save_progress(self, save_manager):
         os.makedirs("Database", exist_ok=True)
         data = {"level": self.level, "exp": self.exp}
         save_manager.save("Database/expdata.json", data)
 
-    # UPDATE: new load_progress *upd-005.cd-220326
     def load_progress(self, save_manager):
         filepath = "Database/expdata.json"
         default = {"level": 1, "exp": 0}
@@ -380,8 +399,6 @@ class Player:
 
         self.level = data.get("level", 1)
         self.exp = data.get("exp", 0)
-
-    # UPDATED add_coins now functioning *upd-003.cd-220326
 
     def add_coins(self, amount, save_manager, event=None):
         if event:
@@ -403,7 +420,6 @@ class Player:
         print(
             f"{Fore.YELLOW}+{amount} coins added! Total: {existing_data['coins']} coins.{Fore.RESET}")
 
-    # UPDATED: spend_money now functioning *upd-004.cd-220326
     def spend_money(self, amount, save_manager):
         filepath = "Database/coinsdata.json"
         default = {"coins": 0}
@@ -762,7 +778,7 @@ class Player:
         print("v2.0.0      : Stable release")
         print("v2.1.0      : Sounds, Stats, Upgrades, Limits, Mass Inputs")
         print(
-            "v2.2.0        : Anti-cheat, Account")
+            "v2.2.0        : Anti-cheat, Account, Credits, ")
         print("====================\n")
         time.sleep(2)
         print("\n=== CREDITS ===")
