@@ -1,7 +1,7 @@
 # PokePy
 
 Pokepy by PyDevelopments (ran and maintained by one person only) is a terminal-based game (runs only in CLI's / TUI's) and is mainly just a card collection/trading game.
-Most of the codes / functions on initial commits are from AI - essentialy making this project a result of vibe coding, but of course, the idea came from me, the developer (JL).
+SOME (I'm now learning more not to be dependent on AI.) of the codes / functions on initial commits are from AI - essentialy making this project a result of vibe coding, but of course, the idea came from me, the developer.
 Do understand that this is just a beginner project, nothing too serious, but it might be serious if the game continues to receive updates.
 The sole purpose of this project/program being in GitHub is to learn more by receiving help from people who might see this and also learn stuff like using GitHub and Git. - dev
 

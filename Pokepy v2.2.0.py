@@ -1,3 +1,7 @@
+'''
+Official copy of Pokepy.
+'''
+
 import matplotlib.pyplot as plt
 import sys
 import os
@@ -30,7 +34,7 @@ else:
 CREATURE_CARDS = ['Pykagloo', 'Fireguard', 'Balbuzer',
                   'Spookie', 'Bloomey', "Arcdog", "Bunbun", "Tovolt"]  # Creature Cards
 
-MISC_CARDS = []
+MISC_CARDS = []  # v2.x.x
 
 PLAYER_TITLES = {
     1:  "Novice Collector",
@@ -203,7 +207,7 @@ class Pack:
             save_manager.handle_status(
                 status, "Database/coinsdata.json", default_coins_data)
 
-            pack_cost = 100
+            pack_cost = 200
 
             if coins_data["coins"] < pack_cost:
                 print(
@@ -981,13 +985,6 @@ class Player:
         else:
             print("Invalid option.")
 
-    def startup(self):
-        global startup
-        startup = datetime.now().strftime("%H:%M:%S")
-        print(f"Your startup time is: {startup}")
-        time.sleep(1)
-        pass
-
     def show_card_stats(self):
         filepath = "Database/carddata.json"
 
@@ -1567,7 +1564,7 @@ class Settings:
             elif opt == "4":
                 self.account_manager(save_manager, p)
             elif opt == "5":
-                return
+                main()
             else:
                 print("Coming soon!")
                 time.sleep(1)
@@ -2301,6 +2298,13 @@ def log_error(error, location="Unknown"):
     time.sleep(2)
 
 
+def startup():
+    startup = datetime.now().strftime("%H:%M:%S")
+    print(f"Your startup time is: {startup}")
+    time.sleep(1)
+    pass
+
+
 # MAIN
 
 def main():
@@ -2315,7 +2319,6 @@ def main():
     settings = Settings()
     active_event = events.check_event()
     p.load_progress(save_manager)
-    p.startup()
     sound_manager.play_bgm()
     while True:
         clear_screen()
@@ -2355,8 +2358,8 @@ def main():
                     time.sleep(2)
                     p.add_cards(cards, save_manager)
                     time.sleep(1)
-                    p.gain_exp(150, save_manager)
-                    coins1 = events.apply_bonus_coins(200, active_event)
+                    p.gain_exp(100, save_manager)
+                    coins1 = events.apply_bonus_coins(50, active_event)
                     p.add_coins(coins1, save_manager)
                     print()  # Blank Line
                     input("Press ENTER to continue...")
@@ -2372,8 +2375,8 @@ def main():
                         name = card.Icard
                         item_counts[name] = item_counts.get(name, 0) + 1
                     print("You may use these items to upgrade your cards.")
-                    p.gain_exp(50, save_manager)
-                    coins2 = events.apply_bonus_coins(100, active_event)
+                    p.gain_exp(75, save_manager)
+                    coins2 = events.apply_bonus_coins(25, active_event)
                     p.add_coins(coins2, save_manager)
                     p.auto_addItems(item_counts, save_manager)
                     input("Press ENTER to continue playing...")
@@ -2459,4 +2462,5 @@ def main():
 
 
 if __name__ == '__main__':
+    startup()
     main()
