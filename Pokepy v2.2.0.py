@@ -695,7 +695,7 @@ class Player:
                 f"{Fore.YELLOW}You've already claimed your daily reward today!{Fore.RESET}")
             print(f"{Fore.YELLOW}Come back tomorrow for another reward!{Fore.RESET}")
             time.sleep(2)
-            return
+            input("Press ENTER to continue...")
 
         print(f"{Fore.CYAN}=== DAILY REWARD ==={Fore.RESET}")
         print("Opening your daily reward...")
@@ -722,7 +722,7 @@ class Player:
                 "coins": random.randint(70, 150),
                 "exp": random.randint(60, 100),
                 "items": {
-                    random.choice(["Void Crystal", "Celestial Wand"]): 1,
+                    random.choice(["Void Crystal", "Obisdian Shard"]): 1,
                     random.choice(["Magical Powder", "Quantum Ball"]): random.randint(2, 5)
                 },
                 "cards": 2
@@ -768,6 +768,7 @@ class Player:
         print(f"\n{Fore.CYAN}=== REWARD CLAIMED! ==={Fore.RESET}")
         print("Come back tomorrow for another reward!")
         time.sleep(2)
+        input("Press ENTER to continue...")
 
     def show_about(self):
         print("\n=== ABOUT POKEPY ===")
@@ -1790,6 +1791,11 @@ class Settings:
             if acc_data.get('username', 'NOT SET') != "NOT SET":
                 print(
                     "You currently have an existing username. Unfortunately, you cannot change this anymore.")
+                time.sleep(2)
+                return
+
+            if acc_data.get('password', 'NOT SET') == "NOT SET":
+                print("Please create a password before setting your username.")
                 time.sleep(2)
                 return
 
