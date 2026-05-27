@@ -1,9 +1,9 @@
 '''
-This module is made for CardPy versions 2.3 and above. It is a battle card game (BCG) where you use
+This module is made for CardPy (PokePy) versions 2.x and above. It is a battle card game where you use
 battle cards that you collect/trade and fight until you win. Work In Progress -May 11, 2026 PhST-
 '''
 
-CARD_STATS = {  # TODO #1 | v2.3: Finalize creature attributes and substitute placeholders.
+CARD_STATS = {  # TODO #1 | v2.x: Finalize creature attributes and substitute placeholders.
     "Pykagloo": {"hp": ..., "atk": ..., "def": ..., "type": ...},
     "Fireguard": {"hp": ..., "atk": ..., "def": ..., "type": ...},
     "Spookie": {"hp": ..., "atk": ..., "def": ..., "type": ...},
