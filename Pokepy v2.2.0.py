@@ -756,7 +756,7 @@ class Player:
         print("v2.0.0      : Stable release")
         print("v2.1.0      : Sounds, Stats, Upgrades, Limits, Mass Inputs")
         print(
-            "v2.2.0        : Anti-cheat, Account, Credits, ")
+            "v2.2.0        : Anti-cheat, Account, Credits, New Limits, Optimized Saving Info")
         print("====================\n")
         time.sleep(2)
         print("\n=== CREDITS ===")
