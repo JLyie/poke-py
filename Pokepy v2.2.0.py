@@ -323,19 +323,17 @@ class Player:
         # Write
         save_manager.save(filepath, existing_data)
 
-    def view_collection(self):
+    def view_collection(self, save_manager):
         filepath = "Database/carddata.json"
+        default = []
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
+        cards, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
+
+        if not cards:
+            print("Collection is empty.")
+            time.sleep(2)
             return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your card collection is empty.")
-                return
-            cards = json.loads(content)
 
         print("\n=== YOUR CARD COLLECTION ===")
         for i, card in enumerate(cards, start=1):
@@ -348,19 +346,12 @@ class Player:
         print(f"Total cards: {len(cards)}")
         print("============================\n")
 
-    def view_items(self):
+    def view_items(self, save_manager):
         filepath = "Database/itemdata.json"
+        default = []
 
-        if not os.path.exists(filepath):
-            print("No item inventory found.")
-            return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your item inventory is empty.")
-                return
-            items = json.loads(content)
+        items, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         print("\n=== YOUR ITEM INVENTORY ===")
         for i, item in enumerate(items, start=1):
@@ -447,15 +438,13 @@ class Player:
             f"{Fore.YELLOW}-{amount} coins spent! Remaining: {existing_data['coins']} coins.{Fore.RESET}")
         return True
 
-    def show_stats(self):
+    def show_stats(self, save_manager):
         os.makedirs("Database", exist_ok=True)
         FILEPATH1 = "Database/coinsdata.json"
-        coins = 0  # default if file doesn't exist yet
-        if os.path.exists(FILEPATH1):
-            with open(FILEPATH1, "r") as f:
-                content = f.read()
-                if content.strip():
-                    coins = json.loads(content)["coins"]
+        default = {"coins": 0}  # default if file doesn't exist yet
+
+        coins_data, status = save_manager.load(FILEPATH1, default)
+        save_manager.handle_status(status, FILEPATH1, default)
 
         next_level_exp = int(100 * (self.level ** 1.5)
                              ) if self.level < 50 else 0
@@ -464,29 +453,22 @@ class Player:
         print(f"Level    : {self.level}{' (MAX)' if self.level == 50 else ''}")
         print(
             f"EXP      : {self.exp} / {next_level_exp if self.level < 50 else 'MAX'}")
-        print(f"Coins    : {coins}")
+        print(f"Coins    : {coins_data["coins"]}")
         print("====================\n")
 
-    def upgrade_card(self, p_coins):
+    def upgrade_card(self, p_coins, save_manager):
         filepath = "Database/carddata.json"
         exp_filepath = "Database/expdata.json"
+        default_cards = []
+        default_level = {"level": 1}
         level_req = False
         upd_type = 0  # 0 = Basic | 1 = Advanced
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
-            return
+        cards, status1 = save_manager.load(filepath, default_cards)
+        save_manager.handle_status(status1, filepath, default_cards)
 
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your card collection is empty.")
-                return
-            cards = json.loads(content)
-
-        with open(exp_filepath, "r") as e:
-            exp_content = e.read()
-            exp = json.loads(exp_content)["level"]
+        exp, status2 = save_manager.load(exp_filepath, default_level)
+        save_manager.handle_status(status2, exp_filepath, default_level)
 
         if exp >= 10:
             level_req = True
@@ -619,12 +601,11 @@ class Player:
 
         # Check items
         item_filepath = "Database/itemdata.json"
-        existing_items = []
-        if os.path.exists(item_filepath):
-            with open(item_filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_items = json.loads(content)
+        default_items = []
+
+        existing_items, status3 = save_manager.load(
+            item_filepath, default_items)
+        save_manager.handle_status(status3, item_filepath, default_items)
 
         for required_item, required_qty in cost_items.items():
             for owned_item in existing_items:
@@ -652,8 +633,7 @@ class Player:
                     break
         existing_items = [
             item for item in existing_items if item["quantity"] > 0]
-        with open(item_filepath, "w") as f:
-            json.dump(existing_items, f, indent=4)
+        save_manager.save(item_filepath, existing_items)
 
         # Apply upgrade
         selected_card[card_key] = next_tier
@@ -667,8 +647,7 @@ class Player:
         selected_card["worth"] = round(new_worth, 2)
 
         # Save updated cards
-        with open(filepath, "w") as f:
-            json.dump(cards, f, indent=4)
+        save_manager.save(filepath, cards)
 
         print(f"\n{Fore.GREEN}Upgrade successful!{Fore.RESET}")
         print(f"{selected_card['name']} | Rarity: {selected_card['rarity']} | Border: {selected_card['border']} | Quality: {selected_card['image_quality']} | Worth: ${selected_card['worth']:.2f}")
@@ -677,17 +656,12 @@ class Player:
 
     def claim_daily(self, Cpack, save_manager):
         filepath = "Database/dailydata.json"
-        os.makedirs("Database", exist_ok=True)
-
         today = datetime.now().strftime("%Y-%m-%d")
 
         # Load existing data
-        existing_data = {"last_claimed": None}
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        default = {"last_claimed": None}
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         # Check if already claimed today
         if existing_data["last_claimed"] == today:
@@ -762,8 +736,7 @@ class Player:
 
         # Save claimed date
         existing_data["last_claimed"] = today
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(filepath, existing_data)
 
         print(f"\n{Fore.CYAN}=== REWARD CLAIMED! ==={Fore.RESET}")
         print("Come back tomorrow for another reward!")
@@ -773,7 +746,7 @@ class Player:
     def show_about(self):
         print("\n=== ABOUT POKEPY ===")
         print("Game        : PokePy")
-        print("Version     : v2.1.0")
+        print("Version     : v2.2.0")
         print("Developer   : JL (PyDevelopments)")
         print("Description : A terminal-based card game.")
         print()
@@ -795,35 +768,28 @@ class Player:
         print("For any concerns/inquiries regarding credits, please email here: lugasan.pydevelopments@gmail.com")
         print("===============================")
 
-    def trade_sell_cards(self):
+    def trade_sell_cards(self, save_manager):
         filepath = "Database/carddata.json"
+        default_cards = []
         trade_filepath = "Database/tradedata.json"
-        os.makedirs("Database", exist_ok=True)
+        today = datetime.now().strftime("%Y-%m-%d")
+        default_trade = {"date": today, "trades_left": 3}
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
+        cards, status1 = save_manager.load(filepath, default_cards)
+        save_manager.handle_status(status1, filepath, default_cards)
+
+        if not cards:
+            print("Your card collection is empty")
             time.sleep(2)
             return
 
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your card collection is empty.")
-                time.sleep(2)
-                return
-            cards = json.loads(content)
-
         # Load trade data
-        today = datetime.now().strftime("%Y-%m-%d")
-        trade_data = {"date": today, "trades_left": 3}
-        if os.path.exists(trade_filepath):
-            with open(trade_filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    trade_data = json.loads(content)
-                    # Reset if it's a new day
-                    if trade_data["date"] != today:
-                        trade_data = {"date": today, "trades_left": 3}
+        trade_data, status2 = save_manager.load(trade_filepath, default_trade)
+        save_manager.handle_status(status2, trade_filepath, default_trade)
+
+        # Reset if it's a new day
+        if trade_data["date"] != today:
+            trade_data = {"date": today, "trades_left": 3}
 
         print("\n=== CARD TRADING & SELLING ===")
         print("1. Sell a card for coins")
@@ -890,8 +856,7 @@ class Player:
             for i in sorted([c - 1 for c in choices], reverse=True):
                 cards.pop(i)
 
-            with open(filepath, "w") as f:
-                json.dump(cards, f, indent=4)
+            save_manager.save(filepath, cards)
 
             self.add_coins(int(total_sell))
             print(
@@ -927,8 +892,10 @@ class Player:
             npc_rarities = {
                 "Common": ["Common Balbuzer", "Common Spookie", "Common Fireguard"],
                 "Uncommon": ["Uncommon Dreamy", "Uncommon Jiggleboo", "Uncommon Peckoo"],
-                "Rare": ["Rare Pikagloo", "Rare Grengie", "Rare Mewmew"],
+                "Rare": ["Rare Pykagloo", "Rare Grengie", "Rare Mewmew"],
                 "Legendary": ["Legendary Fireguard", "Legendary Dragoneer"]
+                # Mewmew, Dreamy, Grengie, Peckoo, and Dragoneer creature cards
+                # should only be created here, for an NPC trade card.
             }
             npc_borders = ["Non-Holo", "Foil", "Holo", "Rainbow"]
             npc_qualities = ["Poor", "Good", "Excellent", "Perfect"]
@@ -970,13 +937,11 @@ class Player:
 
             # Swap cards
             cards[choice - 1] = npc_card
-            with open(filepath, "w") as f:
-                json.dump(cards, f, indent=4)
+            save_manager.save(filepath, cards)
 
             # Update trades left
             trade_data["trades_left"] -= 1
-            with open(trade_filepath, "w") as f:
-                json.dump(trade_data, f, indent=4)
+            save_manager.save(trade_filepath, trade_data)
 
             print(
                 f"{Fore.GREEN}Successfully traded {your_card['name']} for {npc_card['name']}!{Fore.RESET}")
@@ -986,21 +951,12 @@ class Player:
         else:
             print("Invalid option.")
 
-    def show_card_stats(self):
+    def show_card_stats(self, save_manager):
         filepath = "Database/carddata.json"
+        default = []
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
-            time.sleep(2)
-            return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-        if not content.strip():
-            print("Your card collection is empty.")
-            time.sleep(2)
-            return
-        cards = json.loads(content)
+        cards, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         if not cards:
             print("Your card collection is empty.")
@@ -1121,18 +1077,15 @@ class Shop:
         self.stocklist = ["ON STOCK", "NO STOCK"]
         self.randchoice = random.choice(self.stocklist)
 
-    def verify(self, buy, inv):
+    def verify(self, buy, inv, save_manager):
         # buy = the item the player wants to buy (string)
         # inv = dict of items the player needs to spend e.g. {"Astral Wand": 2}
 
         filepath = "Database/itemdata.json"
-        existing_data = []
+        default = []
 
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         # Check if player has enough of each required item
         for required_item, required_qty in inv.items():
@@ -1154,7 +1107,7 @@ class Shop:
         time.sleep(2)
         return True
 
-    def cts(self, p, events, active_event):
+    def cts(self, p, events, active_event, save_manager):
         print("Welcome to the Shop, player!\n")
         print("CURRENT STOCKS")
         print(f"1. Obsidian Shard     - 20 Magical Powder, 10 Fiery Leather, and 2 Void Crystal")
@@ -1282,26 +1235,23 @@ class Shop:
             return
 
         if inp == "3":
-            self.deduct_items(total_cost)
+            self.deduct_items(total_cost, save_manager)
             for _ in range(qty):
                 self.open_chest(p, active_event)
                 time.sleep(1)
                 return
 
-        self.deduct_items(total_cost)
+        self.deduct_items(total_cost, save_manager)
         for _ in range(qty):
             p.auto_addItems({name: 1})
             print(f"{Fore.GREEN}You successfully bought {qty}x {name}!{Fore.RESET}")
 
-    def deduct_items(self, cost):
+    def deduct_items(self, cost, save_manager):
         filepath = "Database/itemdata.json"
-        existing_data = []
+        default = []
 
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         for item_name, qty in cost.items():
             for owned_item in existing_data:
@@ -1313,8 +1263,7 @@ class Shop:
         existing_data = [
             item for item in existing_data if item["quantity"] > 0]
 
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(filepath, existing_data)
 
     def open_chest(self, p, event=None):
         print(f"\n{Fore.YELLOW}Opening chest...{Fore.RESET}")
@@ -1878,11 +1827,11 @@ class Settings:
 
             save_manager.save("Database/accountdata.json", acc_data)
 
-        print(f"Bio set! ✓")
-        time.sleep(2)
-        print("Returning...")
-        time.sleep(2)
-        self.account_manager(save_manager, p)
+            print(f"Bio set! ✓")
+            time.sleep(2)
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
 
     def update_account(self, acc_data, save_manager):
         password = acc_data.get('password', 'NOT SET')
@@ -2387,7 +2336,7 @@ def main():
                     p.auto_addItems(item_counts, save_manager)
                     input("Press ENTER to continue playing...")
             elif x == "2":
-                p.show_stats()
+                p.show_stats(save_manager)
                 input("Press ENTER to continue...")
             elif x == "3":
                 print(
@@ -2396,10 +2345,10 @@ def main():
                 )
                 opt = input("Please pick an option: ")
                 if opt == '1':
-                    p.view_collection()
+                    p.view_collection(save_manager)
                     input("Press ENTER to continue playing...")
                 elif opt == '2':
-                    p.view_items()
+                    p.view_items(save_manager)
                     input("Press ENTER to continue playing...")
                 else:
                     pass
@@ -2414,7 +2363,7 @@ def main():
                         if content.strip():
                             current_coins = json.loads(content)["coins"]
 
-                p.upgrade_card(current_coins)
+                p.upgrade_card(current_coins, save_manager)
             elif x == "6":
                 events.show_active_event()
 
@@ -2423,20 +2372,20 @@ def main():
                         f"{Fore.CYAN}Flash Sale is active! Visit the shop to see limited items!")
                     go_shop = input("Go to shop now? (y/n): ").strip().lower()
                     if go_shop == "y":
-                        shop.cts(p, events, active_event)
+                        shop.cts(p, events, active_event, save_manager)
                     else:
                         print(active_event["type"])
 
                 input("Press ENTER to continue...")
             elif x == "7":
-                shop.cts(p, events, active_event)
+                shop.cts(p, events, active_event, save_manager)
                 input("Press ENTER to continue...")
             elif x == "8":
-                p.trade_sell_cards()
+                p.trade_sell_cards(save_manager)
                 time.sleep(2)
                 input("Press ENTER to continue...")
             elif x == "9":
-                p.show_card_stats()
+                p.show_card_stats(save_manager)
                 input("Press ENTER to continue...")
             elif x == "10":
                 p.show_about()
