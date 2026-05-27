@@ -1,4 +1,6 @@
-
+'''
+Official copy of Pokepy.
+'''
 
 import matplotlib.pyplot as plt
 import sys
@@ -12,6 +14,13 @@ import json
 import traceback
 import pygame
 import matplotlib
+import hashlib
+import bcrypt
+import stat
+import sqlite3
+import secrets
+import string
+import bcg  # for v2.3
 matplotlib.use('Agg')  # use non-interactive backend
 
 
@@ -21,6 +30,26 @@ if getattr(sys, 'frozen', False):
 else:
     # Running as .py in VS Code
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+CREATURE_CARDS = ['Pykagloo', 'Fireguard', 'Balbuzer',
+                  'Spookie', 'Bloomey', "Arcdog", "Bunbun", "Tovolt"]  # Creature Cards
+
+MISC_CARDS = []  # v2.x.x
+
+PLAYER_TITLES = {
+    1:  "Novice Collector",
+    5:  "Apprentice Trader",
+    10: "Card Enthusiast",
+    15: "Pack Hunter",
+    20: "Rare Seeker",
+    25: "Holo Collector",
+    30: "Elite Trader",
+    35: "Master Collector",
+    40: "Legendary Hunter",
+    45: "Rainbow Chaser",
+    50: "Ultimate Collector"
+}
+
 RARITY_TIERS = ["Common", "Uncommon", "Rare", "Legendary"]
 # "Rainbow" Quality can only be obtained from NPC Trades
 BORDER_TIERS = ["Non-Holo", "Foil", "Holo", "Rainbow"]
@@ -57,7 +86,7 @@ SPECIAL_EVENTS = [
         "description": "Special limited items available in the shop!",
         "limited_items": {
             "Mystery Box": {"cost": {"Magical Powder": 25, "Fiery Leather": 10, "Quantum Ball": 10}, "reward": {"Void Crystal": 1, "Celestial Wand": 1}},
-            "Booster Bundle": {"cost": {"Fiery Leather": 10, "Magical Powder": 10}, "reward": {"Quantum Ball": 3, "Magical Powder": 5}}
+            "Booster Bundle": {"cost": {"Fiery Leather": 10, "Magical Powder": 10}, "reward": {"Quantum Ball": 3, "Upgrade Card": 2}}
         }
     }
 ]
@@ -67,6 +96,14 @@ EVENT_DURATIONS = {
     "medium": 1,      # 24 hours
     "long": 3         # 3 days
 }
+
+
+def get_title(level):
+    title = "Novice Collector"
+    for lvl, t in PLAYER_TITLES.items():
+        if level >= lvl:
+            title = t
+    return title
 
 
 class Card:
@@ -109,7 +146,7 @@ class Pack:
         image_quality = random.choice(self.image_qualities)
         worth = self.calculate_worth(rarity, border, image_quality)
         # Changed names
-        name = f"{rarity} {random.choice(['Pikagloo', 'Fireguard', 'Balbuzer', 'Spookie', 'Bloomey'])}"
+        name = f"{rarity} {random.choice(CREATURE_CARDS)}"
         return Card(name, rarity, border, image_quality, worth)
 
     def calculate_worth(self, rarity, border, image_quality):
@@ -145,34 +182,58 @@ class Pack:
             pack_value += card.worth
         return cards, pack_value
 
-    def verify(self):
+    def verify(self, save_manager):
         open_filepath = "Database/openpackdata.json"
         exp_filepath = "Database/expdata.json"
-        exp_data = {"level": 1, "exp": 0}
+        default_exp_data = {"level": 1, "exp": 0}
+        default_coins_data = {"coins": 0}
         os.makedirs("Database", exist_ok=True)
 
-        if os.path.exists(exp_filepath):
-            with open(exp_filepath, "r") as a:
-                content_exp = a.read()
-                if content_exp.strip():
-                    exp_data = json.loads(content_exp)
+        exp_data, status = save_manager.load(exp_filepath, default_exp_data)
+        save_manager.handle_status(status, exp_filepath, default_exp_data)
 
-        level_req = exp_data["level"] >= 10  # ✅ clean one liner
+        # For Lvl 10 checks, for pack quantity limiter
+        level_req1 = exp_data["level"] >= 10
+        # For Lvl 5 checks, for coins to buy packs for players past Lvl 5
+        level_req2 = exp_data['level'] >= 5
 
         today = datetime.now().strftime("%Y-%m-%d")
-        open_data = {"date": today, "opens_left": 10}
+        default_open_data = {"date": today, "opens_left": 10}
 
-        if os.path.exists(open_filepath):
-            with open(open_filepath, "r") as b:
-                content = b.read()
-                if content.strip():
-                    open_data = json.loads(content)
-                    if open_data["date"] != today and level_req:
-                        open_data = {"date": today, "opens_left": 10}
+        # Coin Check (Level 5+ Players)
+        if level_req2:
+            coins_data, status = save_manager.load(
+                "Database/coinsdata.json", default_coins_data)
+            save_manager.handle_status(
+                status, "Database/coinsdata.json", default_coins_data)
 
-        if not level_req:
+            pack_cost = 200
+
+            if coins_data["coins"] < pack_cost:
+                print(
+                    f"{Fore.RED}You need {pack_cost} coins to open a pack! You have {coins_data["coins"]}{Fore.RESET}")
+                time.sleep(2)
+                return False
+
+            # Deduct coins
+            coins_data["coins"] -= pack_cost
+            save_manager.save("Database/coinsdata.json", coins_data)
+            print(
+                f"{Fore.YELLOW}-{pack_cost} coins! Remaining: {coins_data['coins']}{Fore.RESET}")
+
+        # Pack Limiter (Level 10+)
+        if not level_req1:
             time.sleep(2)
             return True  # ✅ under level 10, unlimited opens
+
+        today = datetime.now().strftime("%Y-%m-$d")
+        default_open_data = {"date": today, "opens_left": 10}
+
+        open_data, status = save_manager.load(open_filepath, default_open_data)
+        save_manager.handle_status(status, open_filepath, default_open_data)
+
+        if open_data["date"] != today:
+            open_data = {"date": today, "opens_left": 10}
 
         if open_data["opens_left"] <= 0:
             print(
@@ -181,8 +242,7 @@ class Pack:
 
         # Deduct one open and save
         open_data["opens_left"] -= 1
-        with open(open_filepath, "w") as c:
-            json.dump(open_data, c, indent=4)
+        save_manager.save(open_filepath, open_data)
 
         print(
             f"{Fore.YELLOW}Pack opens remaining today: {open_data['opens_left']}/10{Fore.RESET}")
@@ -221,39 +281,35 @@ class ItemPack:
 
 
 class Player:
-    def __init__(self):
+    def __init__(self, save_manager):
+        self.save_manager = save_manager
         self.level = 1
         self.exp = 0
 
-    def add_cards(self, cards):
+    def add_cards(self, cards, save_manager):
         os.makedirs("Database", exist_ok=True)
         filepath = "Database/carddata.json"
 
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                existing_data = json.load(f)
-        else:
-            existing_data = []
+        default = []
+
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         for card in cards:
             existing_data.append(card.to_dict())
 
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(filepath, existing_data)
 
-    def auto_addItems(self, item_counts):
+    def auto_addItems(self, item_counts, save_manager):
         os.makedirs("Database", exist_ok=True)
         filepath = "Database/itemdata.json"
 
         # Initialize first to avoid UnboundLocalError
-        existing_data = []
+        default = []
 
         # Then try to read existing data
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         # Modify
         for name, qty in item_counts.items():
@@ -265,22 +321,19 @@ class Player:
                 existing_data.append(ClassIcard(name).to_dict(qty))
 
         # Write
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(filepath, existing_data)
 
-    def view_collection(self):
+    def view_collection(self, save_manager):
         filepath = "Database/carddata.json"
+        default = []
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
+        cards, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
+
+        if not cards:
+            print("Collection is empty.")
+            time.sleep(2)
             return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your card collection is empty.")
-                return
-            cards = json.loads(content)
 
         print("\n=== YOUR CARD COLLECTION ===")
         for i, card in enumerate(cards, start=1):
@@ -293,36 +346,27 @@ class Player:
         print(f"Total cards: {len(cards)}")
         print("============================\n")
 
-    def view_items(self):
+    def view_items(self, save_manager):
         filepath = "Database/itemdata.json"
+        default = []
 
-        if not os.path.exists(filepath):
-            print("No item inventory found.")
-            return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your item inventory is empty.")
-                return
-            items = json.loads(content)
+        items, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         print("\n=== YOUR ITEM INVENTORY ===")
         for i, item in enumerate(items, start=1):
             print(f"{i}. {item['item_name']} x{item['quantity']}")
         print("===========================\n")
 
-    # UPDATED fixed gain_exp *upd-007.cd-220326
-    def gain_exp(self, amount):
+    def gain_exp(self, amount, save_manager):
         if self.level >= 50:
             print(f"{Fore.RED}You're at max level!{Fore.RESET}")
             return
         self.exp += amount
         print(f"{Fore.GREEN}You gained {amount} EXP!{Fore.RESET}")
         self.check_level_up()
-        self.save_progress()
+        self.save_progress(save_manager)
 
-    # UPDATED new check_level_up *upd-006.cd-220326
     def check_level_up(self, sound_manager=None):
         while self.level < 50:
             level_up_exp = int(100 * (self.level ** 1.5))
@@ -336,71 +380,47 @@ class Player:
             else:
                 break
 
-    # UPDATED new save_progress *upd-008.cd-220326
-    def save_progress(self):
+    def save_progress(self, save_manager):
         os.makedirs("Database", exist_ok=True)
+        data = {"level": self.level, "exp": self.exp}
+        save_manager.save("Database/expdata.json", data)
+
+    def load_progress(self, save_manager):
         filepath = "Database/expdata.json"
-        data = {
-            "level": self.level,
-            "exp": self.exp
-        }
+        default = {"level": 1, "exp": 0}
 
-        with open(filepath, "w") as f:
-            json.dump(data, f, indent=4)
+        data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
-    # UPDATE: new load_progress *upd-005.cd-220326
-    def load_progress(self):
-        os.makedirs("Database", exist_ok=True)
-        filepath = "Database/expdata.json"
+        self.level = data.get("level", 1)
+        self.exp = data.get("exp", 0)
 
-        if not os.path.exists(filepath):
-            default_data = {"level": 1, "exp": 0}
-            with open(filepath, "w") as f:
-                json.dump(default_data, f, indent=4)
-            return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-            if content.strip():
-                data = json.loads(content)
-                self.level = data.get("level", 1)
-                self.exp = data.get("exp", 0)
-
-    # UPDATED add_coins now functioning *upd-003.cd-220326
-    def add_coins(self, amount, event=None):
+    def add_coins(self, amount, save_manager, event=None):
         if event:
             from __main__ import SpecialEvents
             amount = SpecialEvents().apply_bonus_coins(amount, event)
+
         os.makedirs("Database", exist_ok=True)
         FILEPATH = "Database/coinsdata.json"
+        default = {"coins": 0}
 
-        existing_data = {"coins": 0}
-
-        if os.path.exists(FILEPATH):
-            with open(FILEPATH, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        # Load with hash check
+        existing_data, status = save_manager.load(FILEPATH, default)
+        save_manager.handle_status(status, FILEPATH, default)
 
         existing_data["coins"] += amount
 
-        with open(FILEPATH, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(FILEPATH, existing_data)
 
         print(
             f"{Fore.YELLOW}+{amount} coins added! Total: {existing_data['coins']} coins.{Fore.RESET}")
 
-    # UPDATED: spend_money now functioning *upd-004.cd-220326
-    def spend_money(self, amount):
+    def spend_money(self, amount, save_manager):
         filepath = "Database/coinsdata.json"
+        default = {"coins": 0}
 
-        # Read current coins
-        existing_data = {"coins": 0}
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         # Check if enough coins
         if amount > existing_data["coins"]:
@@ -411,23 +431,20 @@ class Player:
         # Deduct coins
         existing_data["coins"] -= amount
 
-        # Save to JSON
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        # Save with hash
+        save_manager.save(filepath)
 
         print(
             f"{Fore.YELLOW}-{amount} coins spent! Remaining: {existing_data['coins']} coins.{Fore.RESET}")
         return True
 
-    def show_stats(self):
+    def show_stats(self, save_manager):
         os.makedirs("Database", exist_ok=True)
         FILEPATH1 = "Database/coinsdata.json"
-        coins = 0  # default if file doesn't exist yet
-        if os.path.exists(FILEPATH1):
-            with open(FILEPATH1, "r") as f:
-                content = f.read()
-                if content.strip():
-                    coins = json.loads(content)["coins"]
+        default = {"coins": 0}  # default if file doesn't exist yet
+
+        coins_data, status = save_manager.load(FILEPATH1, default)
+        save_manager.handle_status(status, FILEPATH1, default)
 
         next_level_exp = int(100 * (self.level ** 1.5)
                              ) if self.level < 50 else 0
@@ -436,29 +453,22 @@ class Player:
         print(f"Level    : {self.level}{' (MAX)' if self.level == 50 else ''}")
         print(
             f"EXP      : {self.exp} / {next_level_exp if self.level < 50 else 'MAX'}")
-        print(f"Coins    : {coins}")
+        print(f"Coins    : {coins_data["coins"]}")
         print("====================\n")
 
-    def upgrade_card(self, p_coins):
+    def upgrade_card(self, p_coins, save_manager):
         filepath = "Database/carddata.json"
         exp_filepath = "Database/expdata.json"
+        default_cards = []
+        default_level = {"level": 1}
         level_req = False
         upd_type = 0  # 0 = Basic | 1 = Advanced
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
-            return
+        cards, status1 = save_manager.load(filepath, default_cards)
+        save_manager.handle_status(status1, filepath, default_cards)
 
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your card collection is empty.")
-                return
-            cards = json.loads(content)
-
-        with open(exp_filepath, "r") as e:
-            exp_content = e.read()
-            exp = json.loads(exp_content)["level"]
+        exp, status2 = save_manager.load(exp_filepath, default_level)
+        save_manager.handle_status(status2, exp_filepath, default_level)
 
         if exp >= 10:
             level_req = True
@@ -591,12 +601,11 @@ class Player:
 
         # Check items
         item_filepath = "Database/itemdata.json"
-        existing_items = []
-        if os.path.exists(item_filepath):
-            with open(item_filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_items = json.loads(content)
+        default_items = []
+
+        existing_items, status3 = save_manager.load(
+            item_filepath, default_items)
+        save_manager.handle_status(status3, item_filepath, default_items)
 
         for required_item, required_qty in cost_items.items():
             for owned_item in existing_items:
@@ -614,7 +623,7 @@ class Player:
                 return
 
         # Deduct coins
-        self.spend_money(cost_coins)
+        self.spend_money(cost_coins, self.save_manager)
 
         # Deduct items
         for item_name, qty in cost_items.items():
@@ -624,8 +633,7 @@ class Player:
                     break
         existing_items = [
             item for item in existing_items if item["quantity"] > 0]
-        with open(item_filepath, "w") as f:
-            json.dump(existing_items, f, indent=4)
+        save_manager.save(item_filepath, existing_items)
 
         # Apply upgrade
         selected_card[card_key] = next_tier
@@ -639,27 +647,21 @@ class Player:
         selected_card["worth"] = round(new_worth, 2)
 
         # Save updated cards
-        with open(filepath, "w") as f:
-            json.dump(cards, f, indent=4)
+        save_manager.save(filepath, cards)
 
         print(f"\n{Fore.GREEN}Upgrade successful!{Fore.RESET}")
         print(f"{selected_card['name']} | Rarity: {selected_card['rarity']} | Border: {selected_card['border']} | Quality: {selected_card['image_quality']} | Worth: ${selected_card['worth']:.2f}")
         time.sleep(2)
         input("Press ENTER to continue...")
 
-    def claim_daily(self, Cpack, Ipack):
+    def claim_daily(self, Cpack, save_manager):
         filepath = "Database/dailydata.json"
-        os.makedirs("Database", exist_ok=True)
-
         today = datetime.now().strftime("%Y-%m-%d")
 
         # Load existing data
-        existing_data = {"last_claimed": None}
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        default = {"last_claimed": None}
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         # Check if already claimed today
         if existing_data["last_claimed"] == today:
@@ -667,7 +669,7 @@ class Player:
                 f"{Fore.YELLOW}You've already claimed your daily reward today!{Fore.RESET}")
             print(f"{Fore.YELLOW}Come back tomorrow for another reward!{Fore.RESET}")
             time.sleep(2)
-            return
+            input("Press ENTER to continue...")
 
         print(f"{Fore.CYAN}=== DAILY REWARD ==={Fore.RESET}")
         print("Opening your daily reward...")
@@ -694,7 +696,7 @@ class Player:
                 "coins": random.randint(70, 150),
                 "exp": random.randint(60, 100),
                 "items": {
-                    random.choice(["Void Crystal", "Celestial Wand"]): 1,
+                    random.choice(["Void Crystal", "Obisdian Shard"]): 1,
                     random.choice(["Magical Powder", "Quantum Ball"]): random.randint(2, 5)
                 },
                 "cards": 2
@@ -711,13 +713,13 @@ class Player:
         print(f"{Fore.CYAN}You got a {tier['name']} reward!{Fore.RESET}\n")
 
         # Give coins
-        self.add_coins(tier["coins"])
+        self.add_coins(tier["coins"], save_manager)
 
         # Give EXP
-        self.gain_exp(tier["exp"])
+        self.gain_exp(tier["exp"], save_manager)
 
         # Give items
-        self.auto_addItems(tier["items"])
+        self.auto_addItems(tier["items"], self.save_manager)
         for item_name, qty in tier["items"].items():
             print(f"{Fore.GREEN}+{qty} {item_name}{Fore.RESET}")
 
@@ -728,23 +730,23 @@ class Player:
             for _ in range(tier["cards"]):
                 time.sleep(1)
                 cards, x = Cpack.open_pack()
-                self.add_cards(cards)
+                self.add_cards(cards, save_manager)
                 for card in cards:
                     print(f"{Fore.GREEN}+{card.name} ({card.rarity}){Fore.RESET}")
 
         # Save claimed date
         existing_data["last_claimed"] = today
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(filepath, existing_data)
 
         print(f"\n{Fore.CYAN}=== REWARD CLAIMED! ==={Fore.RESET}")
         print("Come back tomorrow for another reward!")
         time.sleep(2)
+        input("Press ENTER to continue...")
 
     def show_about(self):
         print("\n=== ABOUT POKEPY ===")
         print("Game        : PokePy")
-        print("Version     : v2.1.0")
+        print("Version     : v2.2.0")
         print("Developer   : JL (PyDevelopments)")
         print("Description : A terminal-based card game.")
         print()
@@ -754,41 +756,40 @@ class Player:
         print("v2.0.0      : Stable release")
         print("v2.1.0      : Sounds, Stats, Upgrades, Limits, Mass Inputs")
         print(
-            "v2.2.0      : Release -> Apr 27, 2026 | 3:00 PM PhST (Estimate, might extend.)")
+            "v2.2.0        : Anti-cheat, Account, Credits, New Limits, Optimized Saving Info")
         print("====================\n")
         time.sleep(2)
         print("\n=== CREDITS ===")
-        # WORK
+        print("BGM -> oceanking (Pixabay)")
+        print("Card Sounds -> freesound_community (Pixabay)")
+        print("Level Up Sound -> Sunovia (Pixabay)")
+        print("Menu Nav. Sound -> SoundReality (Pixabay)")
+        print("===============================")
+        print("For any concerns/inquiries regarding credits, please email here: lugasan.pydevelopments@gmail.com")
+        print("===============================")
 
-    def trade_sell_cards(self):
+    def trade_sell_cards(self, save_manager):
         filepath = "Database/carddata.json"
+        default_cards = []
         trade_filepath = "Database/tradedata.json"
-        os.makedirs("Database", exist_ok=True)
+        today = datetime.now().strftime("%Y-%m-%d")
+        default_trade = {"date": today, "trades_left": 3}
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
+        cards, status1 = save_manager.load(filepath, default_cards)
+        save_manager.handle_status(status1, filepath, default_cards)
+
+        if not cards:
+            print("Your card collection is empty")
             time.sleep(2)
             return
 
-        with open(filepath, "r") as f:
-            content = f.read()
-            if not content.strip():
-                print("Your card collection is empty.")
-                time.sleep(2)
-                return
-            cards = json.loads(content)
-
         # Load trade data
-        today = datetime.now().strftime("%Y-%m-%d")
-        trade_data = {"date": today, "trades_left": 3}
-        if os.path.exists(trade_filepath):
-            with open(trade_filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    trade_data = json.loads(content)
-                    # Reset if it's a new day
-                    if trade_data["date"] != today:
-                        trade_data = {"date": today, "trades_left": 3}
+        trade_data, status2 = save_manager.load(trade_filepath, default_trade)
+        save_manager.handle_status(status2, trade_filepath, default_trade)
+
+        # Reset if it's a new day
+        if trade_data["date"] != today:
+            trade_data = {"date": today, "trades_left": 3}
 
         print("\n=== CARD TRADING & SELLING ===")
         print("1. Sell a card for coins")
@@ -855,8 +856,7 @@ class Player:
             for i in sorted([c - 1 for c in choices], reverse=True):
                 cards.pop(i)
 
-            with open(filepath, "w") as f:
-                json.dump(cards, f, indent=4)
+            save_manager.save(filepath, cards)
 
             self.add_coins(int(total_sell))
             print(
@@ -892,8 +892,10 @@ class Player:
             npc_rarities = {
                 "Common": ["Common Balbuzer", "Common Spookie", "Common Fireguard"],
                 "Uncommon": ["Uncommon Dreamy", "Uncommon Jiggleboo", "Uncommon Peckoo"],
-                "Rare": ["Rare Pikagloo", "Rare Grengie", "Rare Mewmew"],
+                "Rare": ["Rare Pykagloo", "Rare Grengie", "Rare Mewmew"],
                 "Legendary": ["Legendary Fireguard", "Legendary Dragoneer"]
+                # Mewmew, Dreamy, Grengie, Peckoo, and Dragoneer creature cards
+                # should only be created here, for an NPC trade card.
             }
             npc_borders = ["Non-Holo", "Foil", "Holo", "Rainbow"]
             npc_qualities = ["Poor", "Good", "Excellent", "Perfect"]
@@ -935,13 +937,11 @@ class Player:
 
             # Swap cards
             cards[choice - 1] = npc_card
-            with open(filepath, "w") as f:
-                json.dump(cards, f, indent=4)
+            save_manager.save(filepath, cards)
 
             # Update trades left
             trade_data["trades_left"] -= 1
-            with open(trade_filepath, "w") as f:
-                json.dump(trade_data, f, indent=4)
+            save_manager.save(trade_filepath, trade_data)
 
             print(
                 f"{Fore.GREEN}Successfully traded {your_card['name']} for {npc_card['name']}!{Fore.RESET}")
@@ -951,28 +951,12 @@ class Player:
         else:
             print("Invalid option.")
 
-    def startup(self):
-        global startup
-        startup = datetime.now().strftime("%H:%M:%S")
-        print(f"Your startup time is: {startup}")
-        time.sleep(1)
-        pass
-
-    def show_card_stats(self):
+    def show_card_stats(self, save_manager):
         filepath = "Database/carddata.json"
+        default = []
 
-        if not os.path.exists(filepath):
-            print("No card collection found.")
-            time.sleep(2)
-            return
-
-        with open(filepath, "r") as f:
-            content = f.read()
-        if not content.strip():
-            print("Your card collection is empty.")
-            time.sleep(2)
-            return
-        cards = json.loads(content)
+        cards, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         if not cards:
             print("Your card collection is empty.")
@@ -1093,18 +1077,15 @@ class Shop:
         self.stocklist = ["ON STOCK", "NO STOCK"]
         self.randchoice = random.choice(self.stocklist)
 
-    def verify(self, buy, inv):
+    def verify(self, buy, inv, save_manager):
         # buy = the item the player wants to buy (string)
         # inv = dict of items the player needs to spend e.g. {"Astral Wand": 2}
 
         filepath = "Database/itemdata.json"
-        existing_data = []
+        default = []
 
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         # Check if player has enough of each required item
         for required_item, required_qty in inv.items():
@@ -1126,7 +1107,7 @@ class Shop:
         time.sleep(2)
         return True
 
-    def cts(self, p, events, active_event):
+    def cts(self, p, events, active_event, save_manager):
         print("Welcome to the Shop, player!\n")
         print("CURRENT STOCKS")
         print(f"1. Obsidian Shard     - 20 Magical Powder, 10 Fiery Leather, and 2 Void Crystal")
@@ -1254,26 +1235,23 @@ class Shop:
             return
 
         if inp == "3":
-            self.deduct_items(total_cost)
+            self.deduct_items(total_cost, save_manager)
             for _ in range(qty):
                 self.open_chest(p, active_event)
                 time.sleep(1)
                 return
 
-        self.deduct_items(total_cost)
+        self.deduct_items(total_cost, save_manager)
         for _ in range(qty):
             p.auto_addItems({name: 1})
             print(f"{Fore.GREEN}You successfully bought {qty}x {name}!{Fore.RESET}")
 
-    def deduct_items(self, cost):
+    def deduct_items(self, cost, save_manager):
         filepath = "Database/itemdata.json"
-        existing_data = []
+        default = []
 
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                if content.strip():
-                    existing_data = json.loads(content)
+        existing_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
 
         for item_name, qty in cost.items():
             for owned_item in existing_data:
@@ -1285,8 +1263,7 @@ class Shop:
         existing_data = [
             item for item in existing_data if item["quantity"] > 0]
 
-        with open(filepath, "w") as f:
-            json.dump(existing_data, f, indent=4)
+        save_manager.save(filepath, existing_data)
 
     def open_chest(self, p, event=None):
         print(f"\n{Fore.YELLOW}Opening chest...{Fore.RESET}")
@@ -1365,7 +1342,7 @@ class SpecialEvents:
                 self._save_event(existing)
 
         # Random chance to trigger a new event (30% chance per day)
-        if random.random() < 0.30:
+        if random.random() < 0.99:
             return self.start_event()
 
         return None
@@ -1510,14 +1487,23 @@ class SoundManager:
 
 
 class Settings:
-    def show(self, sound_manager):
+    def __init__(self):
+        self.acc_name = "NOT SET"
+        self.acc_gender = "NOT SET"
+        self.acc_pass = "NOT SET"
+        self.acc_username = "NOT SET"
+        self.acc_title = "Novice Collector"  # Changes based on level
+        self.acc_join_data = "NOT SET"
+        self.acc_playtime = 0
+
+    def show(self, sound_manager, save_manager, p):
         while True:
             print("\n=== SETTINGS ===")
             sound_status = "ON" if sound_manager.enabled else "OFF"
             print(f"1. Sound         [{sound_status}]")
-            print(f"2. Display")        # future
-            print(f"3. Gameplay")       # future
-            print(f"4. Account")        # future
+            print(f"2. Display (v2.3)")        # future
+            print(f"3. Gameplay (v2.4)")       # future
+            print(f"4. Account (NEW!)")  # DONE
             print(f"5. Back")
             print("================\n")
 
@@ -1525,8 +1511,10 @@ class Settings:
 
             if opt == "1":
                 self.sound_settings(sound_manager)
+            elif opt == "4":
+                self.account_manager(save_manager, p)
             elif opt == "5":
-                return
+                main()
             else:
                 print("Coming soon!")
                 time.sleep(1)
@@ -1549,6 +1537,702 @@ class Settings:
                 print("Invalid option.")
                 time.sleep(1)
 
+    def account_manager(self, save_manager, p):
+        os.makedirs("Database", exist_ok=True)
+        filepath = "Database/accountdata.json"
+
+        default = {
+            "username": "NOT SET",
+            "name": "NOT SET",
+            "gender": "NOT SET",
+            "password": "NOT SET",
+            "bio": "NOT SET",
+            "join_date": "NOT SET",
+            "playtime": 0
+        }
+
+        acc_data, status = save_manager.load(filepath, default)
+        save_manager.handle_status(status, filepath, default)
+
+        if isinstance(acc_data, list):
+            acc_data = acc_data[0] if acc_data else default
+            save_manager.save(filepath, acc_data)
+
+        title = get_title(p.level)
+
+        # Calculate playtime
+        playtime = acc_data.get("playtime", 0)
+        hours = playtime // 60
+        minutes = playtime % 60
+
+        # Account info
+        print(f"\n=== ACCOUNT ===")
+        print(f"Username     : {acc_data.get('username', 'NOT SET')}")
+        print(f"Display Name : {acc_data.get('name', 'NOT SET')}")
+        print(f"Gender       : {acc_data.get('gender', 'NOT SET')}")
+        print(f"Title        : {title}")
+        print(f"Bio          : {acc_data.get('bio', 'NOT SET')}")
+        print(f"Join Date    : {acc_data.get('join_date', 'NOT SET')}")
+        print(f"Playtime     : {hours}h {minutes}m")
+        print(f"Level        : {p.level}")
+        print("===================\n")
+
+        if all(acc_data.get(x) == "NOT SET" for x in ["username", "name", "gender", "password", "bio", "join_date"]):
+            inp = input(
+                "Your account is not yet fully ready! Would you like to finish setting up? (y/n): ").lower().strip()
+            if inp == "y":
+                self.setup_account(acc_data, save_manager, p)
+            return
+
+        print(f"=== ACTIONS FOR USER {acc_data.get('username', 'NOT SET')}")
+        print("1. Update Account")
+        print("2. Setup Account")
+        print("3. Return")
+
+        choice = input("Please pick an action (1|2|3): ")
+
+        if choice == "1":
+            self.update_account(acc_data, save_manager)
+        elif choice == "2":
+            self.setup_account(acc_data, save_manager, p)
+        elif choice == "3":
+            time.sleep(2)
+            return
+        else:
+            print("Invalid input")
+            return
+
+    # Used to setup/create an account only. use update_account for updating account.
+
+    def setup_account(self, acc_data, save_manager, p):
+        join_data = datetime.now().strftime("%B %d, %Y")
+        print("\n=== SELECT AN OPTION TO SETUP ===\n"
+              "1. Display Name\n"
+              "2. Gender\n"
+              "3. Password\n"
+              "4. Username\n"
+              "5. Bio"
+              )
+        x = input("Pick an option: ")
+
+        if x == "1":
+            name = input("Please enter your name: ")
+
+            if acc_data.get('name', 'NOT SET') != "NOT SET":
+                print(
+                    "You currently have an existing name. Go to 'Update Account' to change it.")
+                time.sleep(2)
+                return
+
+            if not name.strip():
+                print("Name cannot be empty!")
+                time.sleep(2)
+                return
+
+            print("Hold on tight while we process your info...")
+            time.sleep(2)
+
+            acc_data['name'] = name
+
+            # To automatically input join_date.
+            if acc_data.get('join_date', 'NOT SET') == "NOT SET":
+                acc_data['join_date'] = datetime.now().strftime("%B %d, %Y")
+
+            # Write to file
+            save_manager.save("Database/accountdata.json", acc_data)
+
+            print(f"Name set to: {name} ✓")
+            time.sleep(2)
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
+
+        elif x == "2":
+            gender = input("Please enter your gender: ").upper()
+
+            if acc_data.get('gender', 'NOT SET') != "NOT SET":
+                print(
+                    "You currently have an existing gender. Go to 'Update Account' to change it.")
+                time.sleep(2)
+                return
+
+            if not gender.strip():
+                print("Gender cannot be empty!")
+                time.sleep(2)
+                return
+
+            print("Give us a minute while we process your info...")
+            time.sleep(2)
+
+            acc_data['gender'] = gender
+
+            # To automatically input join_date.
+            if acc_data.get('join_date', 'NOT SET') == "NOT SET":
+                acc_data['join_date'] = datetime.now().strftime("%B %d, %Y")
+
+            save_manager.save("Database/accountdata.json", acc_data)
+
+            print(f"Gender set to {gender} ✓")
+            time.sleep(1.5)
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
+
+        elif x == "3":
+            if acc_data.get('password', 'NOT SET') != "NOT SET":
+                print(
+                    "You currently have an existing password. Go to 'Update Account' to change it.")
+                time.sleep(2)
+                return
+
+            password = input("Please enter your desired password: ")
+
+            if not password.strip():
+                print("Your password cannot be empty!")
+                time.sleep(2)
+                return
+
+            print("Processing your info right now...")
+            time.sleep(2)
+
+            stored_hash = save_manager.hash_password(password)
+            acc_data['password'] = stored_hash
+
+            # To automatically input join_date.
+            if acc_data.get('join_date', 'NOT SET') == "NOT SET":
+                acc_data['join_date'] = datetime.now().strftime("%B %d, %Y")
+
+            save_manager.save("Database/accountdata.json", acc_data)
+
+            print("Password saved ✓")
+            time.sleep(2)
+
+            if acc_data.get('username', 'NOT SET') != 'NOT SET':
+                conn = save_manager._get_conn()
+                cur = conn.cursor()
+                cur.execute("SELECT id FROM users WHERE username = ?",
+                            (acc_data.get('username'),))
+                already_registered = cur.fetchone()
+                conn.close()
+
+                if not already_registered:
+                    result1 = save_manager.register_user(
+                        acc_data.get('username'), password)
+                    if result1["success"]:
+                        print(
+                            f"\n{Fore.YELLOW}⚠️  SAVE YOUR RECOVERY CODE: {result['recovery_code']}{Fore.RESET}")
+                        print(
+                            f"{Fore.YELLOW}You will NOT see this again. Write it down!{Fore.RESET}")
+                        input("Press ENTER once done...")
+            else:
+                print(
+                    f"{Fore.YELLOW}Tip: Set your username too to activate your recovery code.{Fore.RESET}")
+                time.sleep(2)
+
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
+
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
+        elif x == "4":
+            if acc_data.get('username', 'NOT SET') != "NOT SET":
+                print(
+                    "You currently have an existing username. Unfortunately, you cannot change this anymore.")
+                time.sleep(2)
+                return
+
+            if acc_data.get('password', 'NOT SET') == "NOT SET":
+                print("Please create a password before setting your username.")
+                time.sleep(2)
+                return
+
+            print(
+                "Think about your username carefully. You will not be able to change this after setting it up.")
+            time.sleep(2)
+            USERNAME = input("Please enter your desired username: ")
+
+            if not USERNAME.strip():
+                print("Username cannot be empty!")
+                time.sleep(2)
+                return
+
+            print("Wait a sec while we take care of your info...")
+            time.sleep(2)
+
+            acc_data['username'] = USERNAME
+
+            # To automatically input join_date.
+            if acc_data.get('join_date', 'NOT SET') == "NOT SET":
+                acc_data['join_date'] = datetime.now().strftime("%B %d, %Y")
+
+            save_manager.save("Database/accountdata.json", acc_data)
+            print("Username saved!")
+            time.sleep(2)
+
+            if acc_data.get('password', 'NOT SET') != 'NOT SET':
+                conn = save_manager._get_conn()
+                cur = conn.cursor()
+                cur.execute("SELECT id FROM users WHERE username = ?",
+                            (acc_data.get('username'),))
+                already_registered = cur.fetchone()
+                conn.close()
+
+                if not already_registered:
+                    plain_password = input(
+                        "Re-enter your password to activate your recovery code: ")
+                    if save_manager.verify_password(plain_password, acc_data.get('password')):
+                        result = save_manager.register_user(
+                            acc_data.get('username'), plain_password)
+                        if result["success"]:
+                            print(
+                                f"\n{Fore.YELLOW}⚠️  SAVE YOUR RECOVERY CODE: {result['recovery_code']}{Fore.RESET}")
+                            print(
+                                f"{Fore.YELLOW}You will NOT see this again. Write it down!{Fore.RESET}")
+                            input("Press ENTER once done...")
+                else:
+                    print(
+                        f"{Fore.RED}Incorrect password. Recovery code not generated.{Fore.RESET}")
+                    print(
+                        f"{Fore.YELLOW}Go to Update Account > Password to try again.{Fore.RESET}")
+                    time.sleep(2)
+
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
+        elif x == "5":
+
+            if acc_data.get('bio', 'NOT SET') != "NOT SET":
+                print(
+                    "You currently have an existing bio. Go to 'Update Account' to change it.")
+
+            bio = input("Enter your bio (max 50 characters): ").strip()
+            if len(bio) > 50:
+                print("Bio too long, buddy. Keep it under 50 characters.")
+                time.sleep(2)
+                return
+
+            if not bio.strip():
+                print(
+                    "We're already almost done setting up your account. Bio cannot be empty.")
+                time.sleep(2)
+                return
+
+            acc_data['bio'] = bio
+
+            # To automatically input join_date.
+            if acc_data.get('join_date', 'NOT SET') == "NOT SET":
+                acc_data['join_date'] = datetime.now().strftime("%B %d, %Y")
+
+            save_manager.save("Database/accountdata.json", acc_data)
+
+            print(f"Bio set! ✓")
+            time.sleep(2)
+            print("Returning...")
+            time.sleep(2)
+            self.account_manager(save_manager, p)
+
+    def update_account(self, acc_data, save_manager):
+        password = acc_data.get('password', 'NOT SET')
+
+        clear_screen()
+
+        print(f"\n=== ACCOUNT ===")
+        print(f"Username     : {acc_data.get('username', 'NOT SET')}")
+        print(f"Display Name : {acc_data.get('name', 'NOT SET')}")
+        print(f"Gender       : {acc_data.get('gender', 'NOT SET')}")
+        print(f"Bio          : {acc_data.get('bio', 'NOT SET')}")
+        print("Password      : ******** (Does not represent the amount of characters in your password.)")
+        print("===================\n")
+
+        if password == "NOT SET":
+            print("You cannot update your information without having a password.")
+            time.sleep(2)
+            return
+
+        upd_choice = input(
+            "Choose an option to update (ex. username): ").lower().strip()
+        if upd_choice == "username":
+            print("Your username cannot be changed anymore. Deleting your account is the only way to have a new username.")
+            time.sleep(2)
+            return
+
+        elif upd_choice == "display name":
+            if acc_data.get('name', 'NOT SET') == "NOT SET":
+                print("You cannot update your display name if you don't have one yet!")
+                time.sleep(2)
+                return
+
+            a = input("Please enter your password: ")
+
+            if save_manager.verify_password(a, password):
+                new_ds = input("Please enter your new display name: ")
+                time.sleep(2)
+                print("Updating your information...")
+                time.sleep(2)
+                acc_data['name'] = new_ds
+                save_manager.save("Database/accountdata.json", acc_data)
+            else:
+                print(
+                    f"{Fore.RED}The password you entered is incorrect. Please try again.{Fore.RESET}")
+                time.sleep(2)
+                return
+        elif upd_choice == "gender":
+            if acc_data.get('gender', 'NOT SET') == "NOT SET":
+                print("You cannot update your display name if you don't have one yet!")
+                time.sleep(2)
+                return
+
+            b = input("Please enter your password: ")
+
+            if save_manager.verify_password(b, password):
+                new_gen = input("Please enter your new gender: ")
+                time.sleep(2)
+                print("Updating your information...")
+                time.sleep(2)
+                acc_data['gender'] = new_gen
+                save_manager.save("Database/accountdata.json", acc_data)
+                time.sleep(1)
+                print("Info successfully updated ✓")
+            else:
+                print(
+                    f"{Fore.RED}The password you entered is incorrect. Please try again.{Fore.RESET}")
+        elif upd_choice == "Bio":
+            if acc_data.get('bio', 'NOT SET') == "NOT SET":
+                print("You cannot update your bio if you don't even have one!")
+
+            c = input("Please enter your password: ")
+
+            if save_manager.verify_password(c, password):
+                new_bio = input("Please enter your new bio (Max 50 chars.): ")
+                if len(new_bio) > 50:
+                    print("Bio too long. Keep it exactly or under 50 chars.")
+                    time.sleep(2)
+                    return
+
+                print("Updating your info...")
+                time.sleep(2)
+                acc_data['bio'] = new_bio
+                save_manager.save("Database/accountdata.json", acc_data)
+                time.sleep(1)
+                print("New bio set!")
+            else:
+                (
+                    f"{Fore.RED}The password you entered is incorrect. Please try again.{Fore.RESET}")
+        elif upd_choice == "password":
+            if acc_data.get('password', 'NOT SET') == "NOT SET":
+                print("You don't have a password set yet. Go to 'Setup Account' first.")
+                time.sleep(2)
+                return
+
+            print("\n=== RESET PASSWORD ===")
+            print("1. I know my current password")
+            print("2. I forgot my password (use recover code)")
+            reset_opt = input("Choose an option (1|2): ").strip()
+
+            if reset_opt == "1":
+                old_pass = input("Enter your current password: ")
+                if not save_manager.verify_password(old_pass, acc_data['password']):
+                    print(f"{Fore.RED}Incorrect password. Returning...{Fore.RESET}")
+                    time.sleep(2)
+                    return
+
+                new_pass = input("Enter your new desired password: ").strip()
+                if not new_pass.strip():
+                    print("Your password cannot be empty!")
+                    time.sleep(2)
+                    return
+
+                clear_screen()
+                confirm_pass = input("Confirm new password: ")
+                if new_pass != confirm_pass:
+                    print(f"{Fore.RED}Passwords don't match.")
+                    time.sleep(2)
+                    return
+
+                print("Updating your password...")
+                time.sleep(2)
+                acc_data['password'] = save_manager.hash_password(new_pass)
+                save_manager.save("Database/accountdata.json", acc_data)
+
+                # Also update in SQLite
+                username = acc_data.get('username')
+                conn = save_manager._get_conn()
+                cur = conn.cursor()
+                cur.execute("UPDATE users SET password_hash = ? WHERE username = ?",
+                            (save_manager.hash_password(new_pass), username))
+                conn.commit()
+                conn.close()
+
+                print(f"{Fore.GREEN}Password updated successfully!{Fore.RESET}")
+                time.sleep(2)
+                return
+
+            elif reset_opt == "2":
+                username = acc_data.get('username', 'NOT SET')
+                if username == 'NOT SET':
+                    print("Username is required before using recovery codes.")
+                    time.sleep(2)
+                    return
+
+                print(f"\nEnter your recovery code for user '{username}'.")
+                print("(Format: XXXX-XXXX-XXXX)")
+                recovery_code = input("Recovery code: ").strip()
+
+                new_pass = input("Enter your new password: ").strip()
+                if not new_pass:
+                    print("Password cannot be empty.")
+                    time.sleep(2)
+                    return
+
+                clear_screen()
+                confirm_pass = input("Confirm password: ").strip()
+                if new_pass != confirm_pass:
+                    print(f"{Fore.RED}Passwords don't match.{Fore.RESET}")
+                    time.sleep(2)
+                    return
+
+                print("Verifying recovery code...")
+                time.sleep(2)
+
+                result = save_manager.reset_password(
+                    username, recovery_code, new_pass)
+
+                if result["success"]:
+                    # Sync both in SQLite and accoundata.json
+                    acc_data['password'] = save_manager.hash_password(new_pass)
+                    save_manager.save("Database/accountdata.json", acc_data)
+
+                    print(f"{Fore.GREEN}Password reset successful.{Fore.RESET}")
+                    print(
+                        f"{Fore.YELLOW}Your NEW RECOVERY CODE: {result['new_recovery_code']}{Fore.RESET}")
+                    print(f"{Fore.YELLOW}Save this somewhere safe.{Fore.RESET}")
+                    input("Press ENTER once done...")
+                else:
+                    print(f"{Fore.RED}Failed: {result['error']}{Fore.RESET}")
+
+            else:
+                print("Invalid option")
+                time.sleep(1)
+
+
+class SaveManager:
+    def __init__(self):
+        os.makedirs("Database", exist_ok=True)
+        self._init_user_db()  # NEW: sets up Database/users.db on first launch
+
+    # -------------------------------------------------------------------------
+    # EXISTING: File save/load system (JSON + .hash) — UNTOUCHED
+    # -------------------------------------------------------------------------
+
+    def _generate_hash(self, data):
+        json_str = json.dumps(data, sort_keys=True)
+        return hashlib.sha256(json_str.encode()).hexdigest()
+
+    def _make_writable(self, filepath):
+        if os.path.exists(filepath):
+            os.chmod(filepath, stat.S_IWRITE)
+
+    def _make_readonly(self, filepath):
+        if os.path.exists(filepath):
+            os.chmod(filepath, stat.S_IREAD)
+
+    def save(self, filepath, data):
+        hash_filepath = filepath.replace(".json", ".hash")
+
+        self._make_writable(filepath)
+        self._make_writable(hash_filepath)
+
+        with open(filepath, "w") as a:
+            json.dump(data, a, indent=4)
+
+        with open(hash_filepath, "w") as b:
+            b.write(self._generate_hash(data))
+
+        self._make_readonly(filepath)
+        self._make_readonly(hash_filepath)
+
+    def load(self, filepath, default=None):
+        hash_filepath = filepath.replace(".json", ".hash")
+
+        if not os.path.exists(filepath):
+            return default, "missing"
+
+        if not os.path.exists(hash_filepath):
+            return default, "tampered"
+
+        with open(filepath, "r") as d:
+            content = d.read()
+            if not content.strip():
+                return default, "empty"
+            data = json.loads(content)
+
+        with open(hash_filepath, "r") as e:
+            stored_hash = e.read().strip()
+
+        if self._generate_hash(data) != stored_hash:
+            return default, "tampered"
+
+        return data, "ok"
+
+    def handle_status(self, status, filepath, default):
+        if status == "tampered":
+            print(
+                f"{Fore.RED}Warning! {filepath} has been tampered with!{Fore.RESET}")
+            print(f"{Fore.RED}Resetting corrupted file to default...{Fore.RESET}")
+            self.save(filepath, default)
+            time.sleep(2)
+        elif status == "missing":
+            self.save(filepath, default)
+
+    # -------------------------------------------------------------------------
+    # EXISTING: Password hashing — UNTOUCHED
+    # -------------------------------------------------------------------------
+
+    def hash_password(self, password: str) -> str:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    def verify_password(self, plain_password: str, stored_hash: str) -> bool:
+        return bcrypt.checkpw(plain_password.encode(), stored_hash.encode())
+
+    # -------------------------------------------------------------------------
+    # NEW: SQLite user auth + recovery code system
+    # Lives in Database/users.db — separate from your JSON save files
+    # -------------------------------------------------------------------------
+
+    _DB_PATH = "Database/users.db"
+
+    def _get_conn(self):
+        return sqlite3.connect(self._DB_PATH)
+
+    def _init_user_db(self):
+        """Creates the users table if it doesn't exist yet. Runs silently on startup."""
+        conn = self._get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                recovery_code_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def _hash_recovery_code(self, code: str) -> str:
+        """Normalizes (uppercase, stripped) and hashes the recovery code before storing."""
+        return hashlib.sha256(code.strip().upper().encode()).hexdigest()
+
+    def _generate_recovery_code(self) -> str:
+        """Generates a human-readable code like XK92-BWPT-47MZ."""
+        alphabet = string.ascii_uppercase + string.digits
+        groups = ["".join(secrets.choice(alphabet)
+                          for _ in range(4)) for _ in range(3)]
+        return "-".join(groups)
+
+    def register_user(self, username: str, password: str) -> dict:
+        """
+        Registers a new user in Database/users.db.
+
+        Call this when the player first sets their username + password
+        (inside Settings.setup_account, options 3 and 4).
+
+        Returns:
+            { "success": True,  "recovery_code": "XK92-BWPT-47MZ" }
+            { "success": False, "error": "Username already taken." }
+
+        ⚠️  Show recovery_code to the player ONCE with a clear warning to save it.
+        """
+        conn = self._get_conn()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if cur.fetchone():
+            conn.close()
+            return {"success": False, "error": "Username already taken."}
+
+        recovery_code = self._generate_recovery_code()
+
+        cur.execute(
+            "INSERT INTO users (username, password_hash, recovery_code_hash) VALUES (?, ?, ?)",
+            (username, self.hash_password(password),
+             self._hash_recovery_code(recovery_code))
+        )
+        conn.commit()
+        conn.close()
+
+        return {"success": True, "recovery_code": recovery_code}
+
+    def login_user(self, username: str, password: str) -> dict:
+        """
+        Verifies username + password against Database/users.db.
+
+        Use this if you add a login screen before the main menu.
+
+        Returns:
+            { "success": True }
+            { "success": False, "error": "User not found." }
+            { "success": False, "error": "Incorrect password." }
+        """
+        conn = self._get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT password_hash FROM users WHERE username = ?", (username,))
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            return {"success": False, "error": "User not found."}
+        if not self.verify_password(password, row[0]):
+            return {"success": False, "error": "Incorrect password."}
+
+        return {"success": True}
+
+    def reset_password(self, username: str, recovery_code: str, new_password: str) -> dict:
+        """
+        Resets a player's password using their recovery code.
+        Automatically generates and stores a NEW recovery code after success —
+        the old code is permanently invalidated.
+
+        Hook this into Settings under 'Forgot Password' or a new menu option.
+
+        Returns:
+            { "success": True,  "new_recovery_code": "NEW-CODE-HERE" }
+            { "success": False, "error": "User not found." }
+            { "success": False, "error": "Invalid recovery code." }
+
+        ⚠️  Show new_recovery_code to the player immediately and tell them to save it.
+        """
+        conn = self._get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT recovery_code_hash FROM users WHERE username = ?", (username,))
+        row = cur.fetchone()
+
+        if not row:
+            conn.close()
+            return {"success": False, "error": "User not found."}
+
+        if self._hash_recovery_code(recovery_code) != row[0]:
+            conn.close()
+            return {"success": False, "error": "Invalid recovery code."}
+
+        new_recovery_code = self._generate_recovery_code()
+
+        cur.execute(
+            "UPDATE users SET password_hash = ?, recovery_code_hash = ? WHERE username = ?",
+            (self.hash_password(new_password),
+             self._hash_recovery_code(new_recovery_code), username)
+        )
+        conn.commit()
+        conn.close()
+
+        return {"success": True, "new_recovery_code": new_recovery_code}
+
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -1569,24 +2253,32 @@ def log_error(error, location="Unknown"):
     time.sleep(2)
 
 
+def startup():
+    startup = datetime.now().strftime("%H:%M:%S")
+    print(f"Your startup time is: {startup}")
+    time.sleep(1)
+    pass
+
+
 # MAIN
 
 def main():
+    session_start = datetime.now()
+    save_manager = SaveManager()
     Cpack = Pack()
-    p = Player()
+    p = Player(save_manager)
     Ipack = ItemPack()
     shop = Shop()
     events = SpecialEvents()
     sound_manager = SoundManager()
     settings = Settings()
     active_event = events.check_event()
-    p.load_progress()
-    p.startup()
+    p.load_progress(save_manager)
     sound_manager.play_bgm()
     while True:
         clear_screen()
         print("Hello! Welcome to Pokepy by PyDevelopments! Version 2.2.0")
-        time.sleep(2)
+        time.sleep(0.5)
         print(
             "1. Open a pack\n"
             "2. Player Stats\n"
@@ -1596,9 +2288,9 @@ def main():
             "6. Special Events\n"
             "7. Shop\n"
             "8. Card Trade & Selling\n"
-            "9. Card Statistics (NEW!)\n"
+            "9. Card Statistics\n"
             "10. About & Credits\n"
-            "11. Settings (NEW!)\n"
+            "11. Settings (NEW OPTION!)\n"
             "12. Exit"
         )
         try:
@@ -1611,7 +2303,7 @@ def main():
                 c = input("Choose a pack: ")
                 if c == '1':
                     sound_manager.play_sfx("pack_open.mp3")
-                    Cpack.verify()
+                    Cpack.verify(save_manager)
                     cards, pack_value = Cpack.open_pack()
                     print("Nice! You opened a pack. Here's what you got:")
                     time.sleep(2)
@@ -1619,11 +2311,11 @@ def main():
                         print(f"{i+1}. {card}")
                     print(f"Total pack value: ${pack_value}")
                     time.sleep(2)
-                    p.add_cards(cards)
+                    p.add_cards(cards, save_manager)
                     time.sleep(1)
-                    p.gain_exp(150)
-                    coins1 = events.apply_bonus_coins(200, active_event)
-                    p.add_coins(coins1)
+                    p.gain_exp(100, save_manager)
+                    coins1 = events.apply_bonus_coins(50, active_event)
+                    p.add_coins(coins1, save_manager)
                     print()  # Blank Line
                     input("Press ENTER to continue...")
                 elif c == '2':
@@ -1638,13 +2330,13 @@ def main():
                         name = card.Icard
                         item_counts[name] = item_counts.get(name, 0) + 1
                     print("You may use these items to upgrade your cards.")
-                    p.gain_exp(50)
-                    coins2 = events.apply_bonus_coins(100, active_event)
-                    p.add_coins(coins2)
-                    p.auto_addItems(item_counts)
+                    p.gain_exp(75, save_manager)
+                    coins2 = events.apply_bonus_coins(25, active_event)
+                    p.add_coins(coins2, save_manager)
+                    p.auto_addItems(item_counts, save_manager)
                     input("Press ENTER to continue playing...")
             elif x == "2":
-                p.show_stats()
+                p.show_stats(save_manager)
                 input("Press ENTER to continue...")
             elif x == "3":
                 print(
@@ -1653,15 +2345,15 @@ def main():
                 )
                 opt = input("Please pick an option: ")
                 if opt == '1':
-                    p.view_collection()
+                    p.view_collection(save_manager)
                     input("Press ENTER to continue playing...")
                 elif opt == '2':
-                    p.view_items()
+                    p.view_items(save_manager)
                     input("Press ENTER to continue playing...")
                 else:
                     pass
             elif x == "4":
-                p.claim_daily(Cpack, Ipack)
+                p.claim_daily(Cpack, save_manager)
             elif x == "5":
                 coins_filepath = "Database/coinsdata.json"
                 current_coins = 0
@@ -1671,7 +2363,7 @@ def main():
                         if content.strip():
                             current_coins = json.loads(content)["coins"]
 
-                p.upgrade_card(current_coins)
+                p.upgrade_card(current_coins, save_manager)
             elif x == "6":
                 events.show_active_event()
 
@@ -1680,28 +2372,40 @@ def main():
                         f"{Fore.CYAN}Flash Sale is active! Visit the shop to see limited items!")
                     go_shop = input("Go to shop now? (y/n): ").strip().lower()
                     if go_shop == "y":
-                        shop.cts(p, events, active_event)
+                        shop.cts(p, events, active_event, save_manager)
                     else:
                         print(active_event["type"])
 
                 input("Press ENTER to continue...")
             elif x == "7":
-                shop.cts(p, events, active_event)
+                shop.cts(p, events, active_event, save_manager)
                 input("Press ENTER to continue...")
             elif x == "8":
-                p.trade_sell_cards()
+                p.trade_sell_cards(save_manager)
                 time.sleep(2)
                 input("Press ENTER to continue...")
             elif x == "9":
-                p.show_card_stats()
+                p.show_card_stats(save_manager)
                 input("Press ENTER to continue...")
             elif x == "10":
                 p.show_about()
                 time.sleep(2)
                 input("Press ENTER to continue...")
             elif x == "11":
-                settings.show(sound_manager)
+                settings.show(sound_manager, save_manager, p)
             elif x == "12":
+
+                session_end = datetime.now()
+                session_minutes = int(
+                    (session_end - session_start).total_seconds() / 60)
+
+                playtime_data, status = save_manager.load(
+                    "Database/accountdata.json", {})
+                total_playtime = playtime_data.get(
+                    "playtime", 0) + session_minutes
+                playtime_data["playtime"] = total_playtime
+                save_manager.save("Database/accountdata.json", playtime_data)
+
                 print("Thank you for playing! See you again!")
                 sound_manager.stop_bgm()
                 time.sleep(2)
@@ -1713,4 +2417,5 @@ def main():
 
 
 if __name__ == '__main__':
+    startup()
     main()
