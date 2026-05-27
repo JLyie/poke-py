@@ -1,6 +1,8 @@
 '''
 This module is made for CardPy (PokePy) versions 2.x and above. It is a battle card game where you use
-battle cards that you collect/trade and fight until you win. Work In Progress -May 11, 2026 PhST-
+battle cards that you collect/trade and fight until you win. Still learning pygame, heads up, the next version with
+this module will be animated!
+Status: Pending... -May 11, 2026 PhST-
 '''
 
 CARD_STATS = {  # TODO #1 | v2.x: Finalize creature attributes and substitute placeholders.

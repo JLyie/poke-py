@@ -20,7 +20,7 @@ import stat
 import sqlite3
 import secrets
 import string
-import bcg  # for v2.3
+import bcg  # for v2.x
 matplotlib.use('Agg')  # use non-interactive backend
 
 
