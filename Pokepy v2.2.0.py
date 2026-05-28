@@ -1843,7 +1843,7 @@ class Settings:
         print(f"Display Name : {acc_data.get('name', 'NOT SET')}")
         print(f"Gender       : {acc_data.get('gender', 'NOT SET')}")
         print(f"Bio          : {acc_data.get('bio', 'NOT SET')}")
-        print("Password      : ******** (Does not represent the amount of characters in your password.)")
+        print("Password     : ******** (Does not represent the amount of characters in your password.)")
         print("===================\n")
 
         if password == "NOT SET":
@@ -1898,7 +1898,7 @@ class Settings:
             else:
                 print(
                     f"{Fore.RED}The password you entered is incorrect. Please try again.{Fore.RESET}")
-        elif upd_choice == "Bio":
+        elif upd_choice == "bio":
             if acc_data.get('bio', 'NOT SET') == "NOT SET":
                 print("You cannot update your bio if you don't even have one!")
 
@@ -2011,10 +2011,9 @@ class Settings:
                     input("Press ENTER once done...")
                 else:
                     print(f"{Fore.RED}Failed: {result['error']}{Fore.RESET}")
-
-            else:
-                print("Invalid option")
-                time.sleep(1)
+        else:
+            print("Invalid option")
+            time.sleep(1)
 
 
 class SaveManager:
