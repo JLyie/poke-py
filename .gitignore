@@ -6,3 +6,6 @@ dist/
 *.spec
 Sounds/
 PokepyDEV v2.2.0.py
+__pycache__/
+*.pyc
+*.pyo
