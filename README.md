@@ -5,7 +5,7 @@ SOME (I'm now learning more not to be dependent on AI.) of the codes / functions
 Do understand that this is just a beginner project, nothing too serious, but it might be serious if the game continues to receive updates.
 The sole purpose of this project/program being in GitHub is to learn more by receiving help from people who might see this and also learn stuff like using GitHub and Git. - dev
 
-# --- PokePy v2.2.0 ---
+# --- PokePy v2.2.0.1 (HOTFIX-1) ---
 
 ## How to run? (For PC/Laptop) (You can also find the instruction in the latest release notes.)
 

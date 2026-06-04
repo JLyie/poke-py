@@ -432,7 +432,7 @@ class Player:
         existing_data["coins"] -= amount
 
         # Save with hash
-        save_manager.save(filepath)
+        save_manager.save(filepath, existing_data)
 
         print(
             f"{Fore.YELLOW}-{amount} coins spent! Remaining: {existing_data['coins']} coins.{Fore.RESET}")
@@ -460,15 +460,16 @@ class Player:
         filepath = "Database/carddata.json"
         exp_filepath = "Database/expdata.json"
         default_cards = []
-        default_level = {"level": 1}
+        default_level = {"level": 1, "exp": 0}
         level_req = False
         upd_type = 0  # 0 = Basic | 1 = Advanced
 
         cards, status1 = save_manager.load(filepath, default_cards)
         save_manager.handle_status(status1, filepath, default_cards)
 
-        exp, status2 = save_manager.load(exp_filepath, default_level)
+        exp_data, status2 = save_manager.load(exp_filepath, default_level)
         save_manager.handle_status(status2, exp_filepath, default_level)
+        exp = exp_data["level"]
 
         if exp >= 10:
             level_req = True
@@ -581,12 +582,12 @@ class Player:
             time.sleep(2)
             return
 
-        if next_tier == "Rainbow" or "Perfect" and level_req is False:
+        if next_tier in ("Rainbow", "Perfect") and level_req is False:
             print(
                 f"You are not eligible for this upgrade. Your current level is {exp}. Requirement is Level 10 and above.")
             time.sleep(2)
             return
-        elif next_tier == "Rainbow" or "Perfect" and upd_type == 0:
+        elif next_tier in ("Rainbow", "Perfect") and upd_type == 0:
             print(
                 "You are currently in basic upgrading mode. Switch to Advanced and try again.")
             time.sleep(2)
@@ -1230,7 +1231,7 @@ class Shop:
             time.sleep(2)
             return
 
-        if not self.verify(name, cost):
+        if not self.verify(name, cost, save_manager):
             time.sleep(2)
             return
 
@@ -1243,7 +1244,7 @@ class Shop:
 
         self.deduct_items(total_cost, save_manager)
         for _ in range(qty):
-            p.auto_addItems({name: 1})
+            p.auto_addItems({name: 1}, save_manager)
             print(f"{Fore.GREEN}You successfully bought {qty}x {name}!{Fore.RESET}")
 
     def deduct_items(self, cost, save_manager):
